@@ -1,0 +1,685 @@
+---
+title: "Attaques Temporelles sur les Implémentations Cryptographiques"
+format:
+    html: 
+        theme: darkly
+        embed-resources: true
+---
+
+# Introduction aux Attaques par Canal Auxiliaire
+
+## Qu'est-ce qu'une Attaque par Canal Auxiliaire (Side-Channel Attack) ?
+
+Les algorithmes cryptographiques, aussi robustes soient-ils sur le papier, sont toujours implantés sur du matériel ou du logiciel réels. Ces implémentations physiques révèlent, involontairement, des informations sur les données qu'elles traitent à travers des **canaux auxiliaires (side channels)** : le temps d'exécution, la consommation électrique, les émissions électromagnétiques, le bruit acoustique, etc.
+
+Une **attaque par canal auxiliaire** exploite ces informations secondaires pour retrouver des secrets cryptographiques, sans jamais attaquer directement l'algorithme lui-même.
+
+::: {.callout-note title="À retenir"}
+Une attaque par canal auxiliaire ne cherche pas à casser la mathématique de l'algorithme. Elle observe le comportement physique de l'implémentation pour en déduire le secret.
+:::
+
+## Les Attaques Temporelles (Timing Attacks)
+
+L'article fondateur de **Paul C. Kocher (1996)** introduit les attaques temporelles comme une classe concrète et redoutable d'attaques par canal auxiliaire.
+
+L'idée centrale est simple :
+
+- Les systèmes cryptographiques prennent des **temps d'exécution légèrement différents** selon leurs entrées.
+- Ces variations de temps dépendent à la fois de la **clé secrète** et des **données d'entrée**.
+- Un attaquant capable de mesurer précisément ces temps peut en déduire la **clé secrète entière**.
+
+::: {.callout-tip title="Intuition"}
+Imaginez un coffre-fort dont la serrure clique légèrement plus fort quand un chiffre correct est entré. En écoutant attentivement, on peut deviner la combinaison un chiffre à la fois, sans jamais forcer le coffre.
+:::
+
+## Pourquoi les Implémentations Varient-elles en Temps ?
+
+Plusieurs facteurs introduisent des variations temporelles involontaires :
+
+- **Optimisations de performance** : certaines branches de code sont court-circuitées si inutiles (ex. : multiplier par 0).
+- **Instructions conditionnelles** : les branchements `if/else` exécutent des chemins différents selon les données.
+- **Cache RAM** : un accès à une donnée en cache est beaucoup plus rapide qu'un accès en mémoire principale.
+- **Instructions non-déterministes** : la multiplication et la division ont des temps variables selon les opérandes sur de nombreux processeurs.
+- **Divers effets matériels** : pipeline, prédiction de branchement, unités arithmétiques spécialisées.
+
+::: {.callout-warning title="Important"}
+Ces variations ne sont pas des bugs : elles résultent souvent de choix d'optimisation légitimes. Pourtant, elles constituent une fuite d'information sur la clé secrète.
+:::
+
+## Portée de l'Attaque
+
+L'attaque de Kocher cible notamment :
+
+- L'exponentiation modulaire (cœur de RSA et Diffie-Hellman).
+- La réduction modulaire (présente dans DSS).
+- D'autres primitives symétriques (DES, IDEA, RC5, Blowfish...).
+
+Les systèmes réellement menacés incluent :
+
+- Les **jetons cryptographiques** (smart cards, HSM).
+- Les **systèmes cryptographiques en réseau** (TLS/SSL de l'époque).
+- Toute application où l'attaquant peut mesurer des temps de réponse avec une précision raisonnable.
+
+---
+
+# Cryptanalyse d'un Exponentiation Modulaire Simple
+
+## Rappel : L'Exponentiation Modulaire
+
+Les opérations de clé privée de **Diffie-Hellman** et **RSA** se ramènent au calcul de :
+
+$$R = y^x \bmod n$$
+
+où :
+
+- $n$ est le **module** (public).
+- $y$ est le **message** (connu de l'attaquant dans un protocole interactif).
+- $x$ est l'**exposant secret** (la clé privée).
+
+L'objectif de l'attaquant est de retrouver $x$.
+
+::: {.callout-note title="À retenir"}
+Pour que l'attaque fonctionne, la victime doit calculer $y^x \bmod n$ pour **plusieurs valeurs de $y$ distinctes**, avec le **même exposant secret $x$**. Si $x$ change à chaque opération, l'attaque échoue.
+:::
+
+## L'Algorithme Square-and-Multiply (Carré-et-Multiplie)
+
+L'algorithme classique pour calculer $y^x \bmod n$ traite les bits de $x$ un par un :
+
+```
+Soit s₀ = 1
+Pour k = 0 jusqu'à w-1 :
+    Si (bit k de x) vaut 1 alors
+        Rk = (sₖ × y) mod n
+    Sinon
+        Rk = sₖ
+    sₖ₊₁ = Rₖ² mod n
+Fin Pour
+Retourner s_{w-1}
+```
+
+où $w$ est le nombre de bits de $x$.
+
+À chaque itération :
+
+- Un **carré modulaire** est toujours effectué.
+- Une **multiplication modulaire** supplémentaire est effectuée **seulement si le bit courant de $x$ vaut 1**.
+
+::: {.callout-tip title="Intuition"}
+C'est précisément cette asymétrie — multiplication conditionnelle selon le bit de la clé — qui crée la variation temporelle exploitable. Les itérations avec un bit à 1 prennent plus de temps que celles avec un bit à 0.
+:::
+
+## Principe de l'Attaque Bit par Bit
+
+L'attaque procède **de façon incrémentale** : connaissant les bits $0$ à $b-1$ de $x$, on cherche le bit $b$.
+
+### Étape 1 : Recalcul de l'état intermédiaire
+
+Puisque les $b$ premiers bits sont connus, l'attaquant peut **simuler les $b$ premières itérations** de la boucle et obtenir la valeur $s_b$ pour chaque message $y$.
+
+### Étape 2 : Hypothèse sur le bit $b$
+
+L'itération suivante dépend du bit $b$ inconnu :
+
+- Si le bit $b$ vaut **1** : $R_b = (s_b \times y) \bmod n$ est calculé.
+- Si le bit $b$ vaut **0** : cette multiplication est ignorée.
+
+### Étape 3 : Corrélation avec les mesures temporelles
+
+L'attaquant sait quelles valeurs de $y$ rendraient le calcul de $R_b$ particulièrement lent (ou rapide) selon les caractéristiques de l'implémentation.
+
+- Si le temps total d'exponentiation **corrèle** avec la lenteur attendue de $R_b$ → le bit $b$ est probablement **1**.
+- Si aucune corrélation n'est observée → le bit $b$ est probablement **0**.
+
+### Étape 4 : Réutilisation des mesures
+
+Les **mêmes mesures temporelles** peuvent être réutilisées pour découvrir le bit suivant, une fois $b$ connu. Cela rend l'attaque particulièrement économique.
+
+::: {.callout-tip title="Intuition"}
+L'attaque se comporte comme un oracle : à chaque étape, on tente de prédire si la multiplication supplémentaire a eu lieu, et on vérifie en observant le temps total. Les mesures s'accumulent pour augmenter la confiance.
+:::
+
+---
+
+# Correction d'Erreurs dans l'Attaque
+
+## Le Problème des Erreurs de Bit
+
+Lors de l'attaque, il est possible de deviner incorrectement un bit de $x$. Une erreur de bit a des conséquences importantes :
+
+- La valeur simulée $R_b$ devient **incorrecte** (et se comporte comme une valeur aléatoire).
+- Les **itérations suivantes** de la simulation sont également faussées.
+- Les corrélations statistiques avec les temps mesurés **disparaissent** pour les bits suivants.
+
+::: {.callout-note title="À retenir"}
+L'attaque possède une **propriété d'auto-détection d'erreur** : si aucune corrélation significative n'est observée après avoir deviné un bit, c'est un signal fort que ce bit a été mal deviné.
+:::
+
+## Stratégie de Correction
+
+Pour gérer les erreurs, l'attaquant peut maintenir une **liste des candidats les plus probables** pour les bits connus, avec un score de probabilité associé.
+
+L'algorithme de correction devient :
+
+1. **Continuer l'attaque** sur le candidat le plus probable.
+2. Si ce candidat cesse de produire des corrélations, **le pénaliser** (diminuer sa probabilité) et passer au candidat suivant.
+3. Les candidats corrects **montent en classement** au fil des mesures ; les incorrects **descendent**.
+
+::: {.callout-tip title="Intuition"}
+C'est similaire à un algorithme de recherche avec backtracking : on explore le chemin le plus prometteur, et si ce chemin ne mène nulle part, on revient en arrière et on essaie la prochaine option.
+:::
+
+## Coût de la Correction
+
+La correction d'erreurs augmente :
+
+- Les **besoins en mémoire** (stocker plusieurs candidats).
+- Le **temps de calcul** (évaluer plusieurs hypothèses en parallèle).
+
+En revanche, elle peut **réduire significativement le nombre de mesures** temporelles nécessaires, ce qui est souvent le facteur limitant de l'attaque.
+
+---
+
+# L'Attaque Générale : Formalisation Statistique
+
+## Modèle Signal / Bruit
+
+L'attaque temporelle peut être formalisée comme un **problème de détection de signal** :
+
+- Le **signal** correspond à la variation temporelle causée par le bit cible $b$ de l'exposant.
+- Le **bruit** provient de deux sources :
+  - Les **erreurs de mesure** (imprécision de l'horloge, jitter système).
+  - Les **variations dues aux bits inconnus** $b+1, b+2, \ldots, w-1$.
+
+La qualité du signal par rapport au bruit détermine le nombre de mesures nécessaires.
+
+## Formulation Probabiliste
+
+Étant donnés $j$ messages $y_0, y_1, \ldots, y_{j-1}$ avec leurs temps mesurés $T_0, T_1, \ldots, T_{j-1}$, la probabilité qu'une hypothèse $x_b$ sur les $b$ premiers bits soit correcte est :
+
+$$P(x_b) \propto \prod_{i=0}^{j-1} F(T_i - t(y_i, x_b))$$
+
+où :
+
+- $t(y_i, x_b)$ est le temps estimé des $b$ premières itérations pour le message $y_i$ sous l'hypothèse $x_b$.
+- $F$ est la distribution de probabilité attendue du résidu $T - t(y, x_b)$ pour un $x_b$ correct.
+
+Pour choisir entre deux hypothèses $x_b$ et $x_b'$ (différant sur le bit $b$), la probabilité que $x_b$ soit correct est :
+
+$$\frac{\prod_{i=0}^{j-1} F(T_i - t(y_i, x_b))}{\prod_{i=0}^{j-1} F(T_i - t(y_i, x_b)) + \prod_{i=0}^{j-1} F(T_i - t(y_i, x_b'))}$$
+
+::: {.callout-warning title="Limite pratique"}
+En pratique, cette formule est difficile à utiliser directement car estimer $F$ avec précision nécessite une connaissance approfondie du système cible, ce qui représente un effort considérable.
+:::
+
+---
+
+# Simplification de l'Attaque : Approche par la Variance
+
+## Décomposition du Temps Total
+
+Chaque observation temporelle peut s'écrire :
+
+$$T = e + \sum_{i=0}^{w-1} t_i$$
+
+où :
+
+- $t_i$ est le temps requis pour les opérations de multiplication et de carré à l'itération $i$.
+- $e$ représente les erreurs de mesure, le surcoût de la boucle, etc.
+
+## La Méthode de la Variance
+
+Étant donné une hypothèse $x_b$ sur les $b$ premiers bits, l'attaquant peut calculer $\sum_{i=0}^{b-1} t_i$ pour chaque échantillon $y$.
+
+En soustrayant cette quantité de $T$, on obtient :
+
+$$T - \sum_{i=0}^{b-1} t_i = e + \sum_{i=b}^{w-1} t_i$$
+
+### Cas où $x_b$ est correct
+
+Les termes $t_0, \ldots, t_{b-1}$ sont correctement compensés. La variance résiduelle est :
+
+$$\text{Var}(e) + (w - b) \cdot \text{Var}(t)$$
+
+### Cas où seulement les $c < b$ premiers bits sont corrects
+
+Les itérations incorrectement simulées (de $c$ à $b-1$) **ajoutent du bruit** au lieu d'en retirer. La variance résiduelle devient :
+
+$$\text{Var}(e) + (w - b + 2c) \cdot \text{Var}(t)$$
+
+::: {.callout-tip title="Intuition"}
+Une itération correctement simulée **réduit** la variance de $\text{Var}(t)$ (on retire une source de variation connue). Une itération incorrectement simulée **augmente** la variance de $\text{Var}(t)$ (on ajoute du bruit supplémentaire). La bonne hypothèse se distingue par sa **variance minimale**.
+:::
+
+::: {.callout-note title="À retenir"}
+La méthode de la variance évite d'avoir à estimer $F$ explicitement. Il suffit de comparer les variances résiduelles pour identifier le bon bit : **la variance la plus faible indique l'hypothèse correcte**.
+:::
+
+## Estimation du Nombre de Mesures Nécessaires
+
+### Modèle probabiliste
+
+En approximant $t_i$ par des variables normales indépendantes et en supposant $\text{Var}(e)$ négligeable, la probabilité de succès à chaque étape est :
+
+$$\Phi\!\left(\sqrt{\frac{j(b-c)}{2(w-b)}}\right)$$
+
+où :
+
+- $\Phi$ est la fonction de répartition de la loi normale standard.
+- $j$ est le nombre de mesures temporelles.
+- $b$ est le rang du bit cible.
+- $c$ est le rang du premier bit incorrect dans l'hypothèse concurrente.
+- $w$ est la taille totale de l'exposant en bits.
+
+### Conséquences
+
+Le nombre de mesures nécessaires $j$ est **proportionnel à la taille de l'exposant $w$**.
+
+En pratique :
+
+- Les premiers bits sont les plus difficiles ($b$ petit → rapport signal/bruit faible).
+- Au fur et à mesure que $b$ croît, les probabilités de succès s'améliorent.
+- Des entrées $y$ choisies stratégiquement (ayant des caractéristiques temporelles extrêmes) peuvent **réduire le nombre de mesures nécessaires**.
+
+---
+
+# Résultats Expérimentaux
+
+## Contexte Expérimental
+
+Kocher valide son attaque sur l'implémentation **RSAREF** (RSA Reference Implementation), un outil cryptographique largement utilisé à l'époque.
+
+Configuration :
+
+- **Machine** : Intel Pentium 120 MHz sous MS-DOS.
+- **Modulus $n$** : premier 512-bit de l'exemple Diffie-Hellman de RSAREF.
+- **Mesures** : 1 million de multiplications modulaires $(a \cdot b \bmod n)$.
+
+## Distribution des Temps de Multiplication
+
+Les résultats montrent une distribution des temps de multiplication modulaire avec :
+
+- **Moyenne** $\mu = 1167{,}8 \, \mu s$
+- **Écart-type** $\sigma = 12{,}01 \, \mu s$
+- **Erreur de mesure** inférieure à $1 \, \mu s$ (les tests répétés confirment la précision)
+
+::: {.callout-note title="À retenir"}
+RSAREF utilise la même fonction pour le carré et la multiplication, donc leurs distributions temporelles sont identiques.
+:::
+
+## Distribution des Temps d'Exponentiation
+
+Pour une exponentiation modulaire complète en 512 bits avec un exposant aléatoire de 256 bits :
+
+- RSAREF précompute $y^2$ et $y^3 \bmod n$ et traite **deux bits d'exposant à la fois**.
+- Chaque itération de la boucle effectue **2 carrés** et, si au moins un des deux bits est non nul, **1 multiplication**.
+- Une exponentiation complète nécessite **128 itérations** et environ **352 opérations** (multiplications + carrés).
+
+La distribution attendue de l'exponentiation est approximativement normale avec :
+
+$$\mu \approx (1167{,}8)(352) = 411\,065{,}6 \, \mu s$$
+$$\sigma \approx 12{,}01 \cdot \sqrt{352} = 225{,}3 \, \mu s$$
+
+Les mesures réelles sur 5000 exponentiations donnent $\mu = 419\,901 \, \mu s$ et $\sigma = 235 \, \mu s$, proches des valeurs théoriques.
+
+## Validation de l'Attaque
+
+### Probabilité théorique de succès
+
+Avec $j = 250$ mesures, $b = 1$, $c = 0$, $w = 127$ (128 itérations, la première ignorée) :
+
+$$\Phi\!\left(\sqrt{\frac{250 \cdot (1-0)}{2 \cdot (126)}}\right) \approx 0{,}84$$
+
+Soit environ **84% de chance** de deviner correctement chaque bit.
+
+### Résultats empiriques
+
+Les 5000 mesures ont été divisées en 20 groupes de 250 échantillons. À chacun des 127 bits d'exposant, les variances après soustraction correcte et incorrecte ont été comparées.
+
+Sur **2450 essais**, **2168 ont réussi**, soit une probabilité empirique de **0,885** — légèrement meilleure que la théorie, car les premiers bits sont les plus difficiles et la probabilité s'améliore à mesure que $b$ croît.
+
+### Coût computationnel
+
+L'attaque est **très peu coûteuse** pour l'attaquant. Avec RSAREF (traitement par paires de bits), l'attaquant évalue **4 candidats par paire**. Le coût total est donc environ **4 fois** le coût d'une exponentiation normale, sans compter les essais infructueux.
+
+::: {.callout-warning title="Important"}
+Le faible coût computationnel de l'attaque — combiné au fait qu'elle ne nécessite que des **textes chiffrés connus** (et non choisis) — en fait une menace pratique sérieuse.
+:::
+
+---
+
+# Multiplication de Montgomery et le Théorème des Restes Chinois
+
+## La Multiplication de Montgomery (Montgomery Multiplication)
+
+### Principe
+
+La multiplication de Montgomery est une technique algorithmique qui **élimine les étapes de réduction modulo $n$** coûteuses lors d'une multiplication modulaire. Elle travaille dans un domaine transformé.
+
+### Impact sur les Attaques Temporelles
+
+- Montgomery réduit les variations temporelles (moins de bruit de signal).
+- Cependant, **il reste généralement des variations résiduelles**.
+- Si ces variations ne sont pas noyées dans les erreurs de mesure, l'attaque reste faisable.
+
+::: {.callout-note title="À retenir"}
+Si l'erreur de mesure $e$ est grande par rapport à $\text{Var}(t_i)$, le nombre de mesures nécessaires augmente en proportion de $\frac{1}{\text{Var}(t_i)}$. Montgomery réduit $\text{Var}(t_i)$ mais ne l'annule pas nécessairement.
+:::
+
+## Le Théorème des Restes Chinois (Chinese Remainder Theorem, CRT)
+
+### Utilisation en RSA
+
+Le CRT est une optimisation classique de RSA. Au lieu de calculer $y^x \bmod n$ directement, on calcule :
+
+- $y^{x_p} \bmod p$ et $y^{x_q} \bmod q$ séparément (où $n = p \cdot q$).
+- On combine les résultats via le CRT.
+
+Cela réduit le coût computationnel, mais introduit de **nouvelles surfaces d'attaque temporelle**.
+
+### L'Attaque sur la Réduction Modulaire Initiale
+
+La première étape du CRT calcule $y \bmod p$ et $y \bmod q$. Ces réductions sont **vulnérables aux attaques temporelles** :
+
+**Attaque par choix de $y$** : en choisissant des valeurs de $y$ proches de $p$ (ou $q$), l'attaquant peut déterminer si $y < p$ ou $y > p$ :
+
+- Si $y < p$ : $y \bmod p$ ne change pas $y$ → opération rapide.
+- Si $y > p$ : il faut soustraire $p$ au moins une fois → opération plus lente.
+- Si $y$ est légèrement supérieur à $p$ : $y \bmod p$ a des chiffres de tête nuls, ce qui peut encore réduire le temps de la première multiplication.
+
+### Mesures Expérimentales sur RSAREF
+
+Avec un modulus 512-bit sur Pentium, en choisissant $y$ aléatoirement entre $0$ et $2p$ :
+
+- Temps moyen si $y < p$ : **42,1 μs**
+- Temps moyen si $y > p$ : **73,9 μs**
+
+Cette différence de près de 75% est très facilement exploitable.
+
+### Approximation Successive de $p$
+
+En combinant de nombreuses mesures avec des $y$ stratégiquement choisis, l'attaquant peut **approximer progressivement** la valeur de $p$ (ou $q$), et donc factoriser $n$, compromettant totalement la clé RSA.
+
+::: {.callout-warning title="Important"}
+Cette variante peut parfois fonctionner avec des **textes chiffrés connus** (non choisis), rendant l'attaque applicable aux **signatures numériques RSA**.
+:::
+
+### Détails de l'Algorithme de Division de RSAREF
+
+La boucle de division de RSAREF effectue une division entière des deux chiffres supérieurs de $y$ par le chiffre supérieur de $p$ plus un, puis une soustraction conditionnelle si le résultat est trop grand.
+
+Cette soustraction conditionnelle supplémentaire dépend **uniquement de $y$ (connu) et des deux chiffres supérieurs de $p$ (secrets)**. Une attaque exhaustive sur ces chiffres, corrélée aux temps observés, peut révéler les chiffres supérieurs de $p$. La même stratégie incrémentale permet ensuite de récupérer les chiffres suivants.
+
+::: {.callout-note title="À retenir"}
+À l'époque de l'article, il n'était pas encore établi si les attaques temporelles pouvaient être adaptées pour attaquer directement les exponentiations modulaires $\bmod p$ et $\bmod q$ dans le schéma CRT complet.
+:::
+
+---
+
+# Cryptanalyse Temporelle du DSS
+
+## Rappel : Le Standard de Signature Numérique (Digital Signature Standard, DSS)
+
+Le DSS calcule la signature $s$ comme suit :
+
+$$s = \left(k^{-1}(H(m) + x \cdot r)\right) \bmod q$$
+
+où :
+
+- $q$ est un modulus public.
+- $r$ est une valeur de signature publique.
+- $k^{-1}$ est souvent **précalculé** avant la signature.
+- $H(m)$ est le hachage du message $m$.
+- $x$ est la **clé privée secrète**.
+
+## Principe de l'Attaque Temporelle sur DSS
+
+En pratique, le calcul se déroule en deux temps :
+
+1. **Calcul de** $(H(m) + x \cdot r) \bmod q$.
+2. **Multiplication** par $k^{-1} \bmod q$.
+
+### Exploitation de la Réduction Modulaire
+
+Si la fonction de réduction modulaire ne s'exécute pas en temps constant, le temps total de signature sera **corrélé** avec le temps de calcul de $x \cdot r \bmod q$.
+
+L'attaquant peut :
+
+- Calculer et compenser le temps de $H(m)$ (connu).
+- Puisque $H(m)$ est de taille comparable à $q$, son addition a peu d'effet sur le temps de réduction.
+- Corréler le temps résiduel avec les **bits de poids fort de $x \cdot r$**.
+
+### Récupération Progressive de $x$
+
+Les bits de poids fort de $x \cdot r$ dépendent de $r$ (connu) et des bits de poids fort de $x$ (secret). L'attaquant :
+
+1. Cherche les valeurs des bits supérieurs de $x$ qui maximisent la corrélation avec les temps observés.
+2. Une fois ces bits connus, il peut simuler plus d'itérations de la boucle de réduction.
+3. Il attaque progressivement les bits suivants de $x$.
+
+::: {.callout-tip title="Intuition"}
+C'est la même idée que pour RSA/Diffie-Hellman : on exploite le fait que le temps de réduction dépend des bits de poids fort de l'opérande, qui dépend lui-même des bits de la clé secrète.
+:::
+
+### Avantage Particulier
+
+Si $k^{-1}$ est précalculé, une signature DSS ne nécessite que **deux multiplications modulaires**, ce qui réduit le bruit de fond et rend la corrélation avec les bits de $x$ **plus facile à détecter**.
+
+---
+
+# Masquage des Caractéristiques Temporelles
+
+## Approche 1 : Exécution en Temps Constant (Constant-Time Execution)
+
+La solution la plus directe est de faire en sorte que toutes les opérations prennent **exactement le même temps**, quelle que soit l'entrée.
+
+### Difficultés pratiques
+
+- En logiciel, atteindre un temps constant **indépendant de la plateforme** est très difficile :
+  - Les compilateurs optimisent le code et peuvent éliminer des branches.
+  - Les accès au cache RAM introduisent des variations non contrôlables.
+  - Les timings d'instructions varient selon les processeurs.
+- Si un **timer externe** est utilisé pour retarder la réponse jusqu'à un instant fixe, d'autres canaux (consommation électrique, performances système) peuvent toujours révéler l'instant de fin du calcul.
+- Certains systèmes d'exploitation **révèlent l'usage CPU** des processus, contournant cette protection.
+
+### Coût en performance
+
+Les implémentations en temps constant sont généralement **plus lentes** : toutes les opérations doivent prendre aussi longtemps que l'opération la plus lente (ex. : toujours effectuer la multiplication optionnelle, même si inutile).
+
+::: {.callout-warning title="Important"}
+Toujours effectuer la multiplication $R_i = (s_i \cdot y) \bmod n$ (même quand elle devrait être ignorée) **ne suffit pas** à rendre l'implémentation en temps constant, car les opérations de carré et les itérations suivantes peuvent encore être exploitées.
+:::
+
+## Approche 2 : Ajout de Délais Aléatoires (Random Delays)
+
+Ajouter des délais aléatoires au temps de traitement augmente le **bruit de mesure** et donc le nombre de textes chiffrés nécessaires à l'attaque.
+
+### Efficacité limitée
+
+Le nombre de mesures nécessaires augmente **au carré** du bruit. Exemple :
+
+- Exponentiateur vulnérable avec $\sigma = 10 \, ms$, cassable avec **1000 mesures**.
+- Ajout d'un délai aléatoire de $\sigma = 1000 \, ms$ (1 seconde).
+- Nombre de mesures requis : $\left(\frac{1000}{10}\right)^2 \times 1000 = 10^7$ mesures.
+
+::: {.callout-warning title="Important"}
+Bien que $10^7$ mesures soit peut-être hors de portée de la plupart des attaquants, un facteur de sécurité de $10^7$ est **insuffisant** selon les standards de sécurité cryptographiques habituels. Cette approche n'est donc **pas recommandée comme protection principale**.
+:::
+
+---
+
+# Prévention de l'Attaque : Le Masquage (Blinding)
+
+## Principe du Masquage (Blinding)
+
+La technique recommandée par Kocher est adaptée du **masquage des signatures (signature blinding)** de Chaum. L'idée est d'empêcher l'attaquant de connaître **l'entrée exacte** de la fonction d'exponentiation modulaire.
+
+Avant de calculer $y^x \bmod n$, on choisit une **paire aléatoire secrète** $(v_i, v_f)$ telle que :
+
+$$v_f^{-1} = v_i^x \bmod n$$
+
+## Application à Diffie-Hellman et RSA
+
+### Pour Diffie-Hellman
+
+1. Choisir $v_i$ aléatoirement.
+2. Calculer $v_f = (v_i^{-1})^x \bmod n$.
+3. Avant l'exponentiation : multiplier l'entrée par $v_i \bmod n$.
+4. Après l'exponentiation : corriger en multipliant par $v_f \bmod n$.
+
+### Pour RSA
+
+Une méthode plus efficace :
+
+1. Choisir $v_f$ aléatoire et premier avec $n$.
+2. Calculer $v_i = (v_f^{-1})^e \bmod n$ (où $e$ est l'exposant public).
+3. Traitement identique : multiplier l'entrée par $v_i$ avant, corriger par $v_f$ après.
+4. Rejeter les messages égaux à $0 \bmod n$.
+
+::: {.callout-tip title="Intuition"}
+L'exponentiation modulaire traite désormais une entrée **masquée aléatoirement**, différente à chaque opération. L'attaquant ne peut plus corréler les temps avec une entrée connue, ce qui invalide le fondement de l'attaque.
+:::
+
+## Mise à Jour Efficace des Paires de Masquage
+
+Calculer $v_f^{-1} \bmod n$ est une opération coûteuse (algorithme d'Euclide étendu). Il est donc **impraticable** de générer une nouvelle paire $(v_i, v_f)$ à chaque exponentiation.
+
+### Solution : Mise à Jour Incrémentale
+
+Au lieu de recalculer complètement la paire, on l'**itère** avant chaque exponentiation :
+
+$$v_i' = v_i^2 \bmod n$$
+$$v_f' = v_f^2 \bmod n$$
+
+Le coût est minime : **2 carrés modulaires** (précomputables) + **2 multiplications modulaires**.
+
+::: {.callout-warning title="Important — Ne pas réutiliser les paires"}
+Les paires $(v_i, v_f)$ **ne doivent jamais être réutilisées** car elles-mêmes pourraient être compromises par des attaques temporelles, rendant vulnérable l'exposant secret.
+:::
+
+## Sécurité du Masquage
+
+Si $(v_i, v_f)$ reste secret, l'attaquant ne dispose d'aucune information utile sur l'entrée de l'exponentiation. Les $2^w$ exposants possibles deviennent **indistinguables** dans la distribution observée.
+
+### Limite théorique
+
+Un exponentiation malicieusement conçu pourrait théoriquement produire une distribution avec des pics correspondant aux bits de l'exposant. Le masquage ne **prouve pas** formellement l'absence d'attaque temporelle, mais en pratique les distributions sont proches de la normale et le masquage est considéré efficace.
+
+## Information Résiduelle : Poids de Hamming
+
+Même avec masquage, la distribution temporelle révèle le **temps moyen par opération**, ce qui peut permettre d'inférer le **poids de Hamming** de l'exposant (nombre de bits à 1).
+
+### Protection supplémentaire (si nécessaire)
+
+Pour contrer cela, on peut ajouter un **multiple aléatoire de $\varphi(n)$** à l'exposant avant chaque exponentiation (car $y^{x + k\varphi(n)} \equiv y^x \pmod{n}$ par le théorème d'Euler).
+
+::: {.callout-note title="À retenir"}
+Cette technique randomise également les bits de l'exposant à chaque opération, ce qui protège aussi contre les attaques exploitant les **émissions électromagnétiques** et les **variations de consommation électrique**.
+:::
+
+---
+
+# Extensions aux Autres Cryptosystèmes
+
+## Cryptosystèmes Symétriques
+
+Les attaques temporelles ne se limitent pas aux cryptosystèmes à clé publique. Les algorithmes symétriques présentent également des vulnérabilités :
+
+### DES (Data Encryption Standard)
+
+Le calendrier de clé DES fait pivoter des valeurs C et D de 28 bits. Ce pivot utilise souvent un **test conditionnel** (« faut-il enrouler un bit ? »). Le temps supplémentaire pour traiter les bits non nuls révèle potentiellement le **poids de Hamming de la clé**.
+
+En moyenne, cette fuite fournit environ **3,95 bits d'information** sur la clé de 56 bits (quantifiable analytiquement).
+
+### IDEA
+
+IDEA utilise une multiplication modulo $2^{16} + 1$ dans sa fonction $f()$. Cette opération s'exécute en **temps non constant** sur de nombreuses architectures.
+
+### RC5
+
+RC5 utilise des rotations dont le temps dépend du **nombre de positions** à faire pivoter sur certaines plateformes, créant une vulnérabilité directe.
+
+### Blowfish, SEAL, DES (accès tables)
+
+Ces algorithmes utilisent des tables en mémoire. Les accès au **cache RAM** créent des variations temporelles si les tables ne sont pas accédées de manière identique à chaque chiffrement.
+
+## Tableau Récapitulatif des Vulnérabilités
+
+| Algorithme | Source de vulnérabilité | Nature |
+|---|---|---|
+| RSA / Diffie-Hellman | Multiplication conditionnelle dans square-and-multiply | Clé publique |
+| RSA avec CRT | Réduction modulaire initiale | Clé publique |
+| DSS | Réduction modulaire dans le calcul de signature | Clé publique |
+| DES | Rotation conditionnelle dans le key schedule | Symétrique |
+| IDEA | Multiplication modulo $2^{16}+1$ | Symétrique |
+| RC5 | Rotations en temps variable | Symétrique |
+| Blowfish/SEAL | Accès tables et cache | Symétrique |
+
+---
+
+# Travaux Futurs et Perspectives
+
+## Pistes de Recherche Identifiées par Kocher
+
+Au moment de la publication, plusieurs questions restaient ouvertes :
+
+- **Attaque directe sur $p$ et $q$ dans RSA-CRT** : pouvoir factoriser $n$ directement depuis les exponentiations modulaires $\bmod p$ et $\bmod q$ serait particulièrement puissant.
+- **Amélioration de l'attaque sur CRT/Montgomery RSA** : les attaques décrites sont alors théoriques pour certaines variantes.
+- **DSS** : l'attaque sur DSS reste à valider expérimentalement.
+- **Raffinements généraux** : des techniques plus sophistiquées d'exploitation des mesures.
+
+## Impact à Long Terme
+
+L'article de Kocher a ouvert un domaine de recherche entier sur les **attaques par canaux auxiliaires (side-channel attacks)**, qui inclut aujourd'hui :
+
+- Les **attaques par analyse de consommation (Power Analysis)** : SPA (Simple Power Analysis) et DPA (Differential Power Analysis).
+- Les **attaques électromagnétiques (EM attacks)**.
+- Les **attaques acoustiques**.
+- Les **attaques par fautes (fault attacks)**.
+
+---
+
+# Conclusions
+
+## Leçon Fondamentale
+
+Tout canal capable de transporter de l'information depuis une zone sécurisée vers l'extérieur constitue un **risque potentiel**. Les caractéristiques temporelles spécifiques à une implémentation forment un tel canal et peuvent compromettre des clés secrètes.
+
+::: {.callout-warning title="Important"}
+La sécurité cryptographique ne peut pas être réduite à la résistance mathématique de l'algorithme. L'**implémentation** est tout aussi critique que l'algorithme lui-même.
+:::
+
+## Recommandations Pratiques
+
+Les algorithmes, protocoles et systèmes vulnérables doivent être révisés pour intégrer des protections contre les attaques temporelles. Les principales mesures sont :
+
+- **Implémentation en temps constant** : difficile mais souhaitable, surtout pour les opérations critiques.
+- **Masquage (blinding)** : protection efficace et peu coûteuse pour RSA et Diffie-Hellman, à mettre en place systématiquement.
+- **Ajout de bruit** : mesure complémentaire insuffisante seule, mais qui peut renforcer d'autres protections.
+- **Randomisation de l'exposant** : addition d'un multiple de $\varphi(n)$ pour protéger aussi contre les attaques EM/puissance.
+
+## Synthèse du Flux de l'Attaque
+
+```{mermaid}
+flowchart TD
+    A[Attaquant observe plusieurs\ncalculs y^x mod n] --> B[Mesure précise\ndes temps T_i]
+    B --> C[Simule les b premiers bits\nconnus de x]
+    C --> D{Hypothèse sur\nle bit b}
+    D -->|bit = 1| E[Calcule R_b = s_b·y mod n]
+    D -->|bit = 0| F[R_b ignoré]
+    E --> G[Compare variances\ndes résidus T - t_estimé]
+    F --> G
+    G -->|Variance minimale| H[Bit b identifié]
+    H -->|bit suivant| C
+    H -->|tous bits trouvés| I[Clé secrète x récupérée]
+    G -->|Aucune corrélation| J[Correction d'erreur:\nRevenir au bit précédent]
+    J --> C
+```
+
+## Message Final
+
+Les nouveaux protocoles et algorithmes cryptographiques **doivent intégrer dès leur conception** des mesures contre les attaques temporelles. La sécurité par obscurité n'est pas suffisante ; des protections structurelles sont indispensables.
+
+::: {.callout-note title="À retenir"}
+La cryptographie moderne ne peut être sûre que si l'**implémentation** résiste aux attaques par canaux auxiliaires, et pas seulement si l'**algorithme** résiste aux attaques mathématiques.
+:::
