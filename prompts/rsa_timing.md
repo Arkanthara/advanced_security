@@ -74,7 +74,11 @@ Then, it should implement the two attack algorithms to recover the bits of the s
 
 At the end, the client should be able to decode the message "Bravo ! Je suis épousplouffé par ta maîtrise du timing attack sur RSA !" using the recovered exponent and the public key, and print the decoded message to confirm the success of the attack.
 
-Finally, the code should include a mitigation strategy to make the square-and-multiply algorithm constant-time, and compare the results of the attack on both the vulnerable and mitigated versions.
+Finally, I want that in a notebook you test the algorithm for different key sizes (from 32 to 2048 bits... Try to use existing implementations from libraries !!!) and analyze accuracy and performance of the attack for each key size, and plot the results to show how the attack performs as the key size increases. I want a study of the number of samples needed for a successful attack as the key size increases and the total execution time.
+
+Please deliver the code for the server, the client, and the notebook for testing and analysis.
+
+The code must be as simple as possible, with numpy style documnentation and comments to explain the logic. The code should be modular and organized for clarity.
 
 
 <!-- Version that don't follow the paper !!! - Simulate for m values of y the execution of the square-and-multiply algorithm up to bit b (which is set to 1), and measure the hamming weight for the result R_b. This gives a model of the cost of the multiplication step when bit b is 1.
