@@ -385,7 +385,7 @@ if __name__ == "__main__":
     # Tiny keys let the simulation run in seconds instead of hours.
     KEY_SIZE = 64   # total modulus bits
     N_BITS   = 16   # how many bits of d to recover
-    TARGET_P = 0.90 # desired per-bit success probability
+    TARGET_P = 0.9999 # desired per-bit success probability
 
     print("  Setting up RSA server …")
     server = Server(key_size=KEY_SIZE)
