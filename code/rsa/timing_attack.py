@@ -102,7 +102,7 @@ def collect_samples(server: Server, m: int) -> tuple[list[int], np.ndarray]:
         y      = random.randint(2, server.n - 1)
         cipher = pow(y, server.public_key, server.n)   # attacker encrypts y
         T      = server.decrypt_timed(cipher)           # server decrypts, leaks time
-        ys.append(y)
+        ys.append(cipher)
         Ts.append(T)
 
     return ys, np.array(Ts, dtype=float)

@@ -22,7 +22,7 @@ def square_and_multiply(y, x, n):
     return R
 ```
 
-I want first that you analyze how the timing of this algorithm can leak by adding some extra time for the multiplication step if exponent bit is 1.
+I want first that you analyze how the timing of this algorithm can leak information if exponent bit is 1.
 
 The attack works like this:
 1. The attacker knows the first 0..b-1 bits of the secret exponent x. He wants to determine the b-th bit. As he knows the first b-1 bits, he can simulate the algorithm up to that point for each y.
@@ -62,12 +62,11 @@ Version 2 (error correction):
 - We repeat this process for each bit b, refining our candidates based on the variance analysis until we narrow down to the most likely value for each bit of the exponent.
 
 The code must implement both versions.
-The code must also implement the two versions of the square-and-multiply algorithm: one where the time leaks information (with the extra sleep) and one that is normal implemented with no extra sleep.
 
-The code must use a simple local server to simulate the RSA decryption service, and a client script to perform the attack and measure the timings.
+The code must create a simple local server to simulate the RSA decryption service, and a client script to perform the attack and measure the timings.
 
-The server should listen for incoming requests, perform the RSA decryption using one of the square-and-multiply algorithm, and return the result.
-Note that first, the server should generate the RSA keys, export the public key and keep the private key secret. To generate the keys, 
+The server should listen for incoming requests, perform the RSA decryption, and return the result.
+Note that first, the server should generate the RSA keys, export the public key and keep the private key secret.
 
 The client script should send multiple requests with different inputs, measure the time taken for each request and store the times for analysis.
 Then, it should implement the two attack algorithms to recover the bits of the secret exponent based on the timing measurements.
