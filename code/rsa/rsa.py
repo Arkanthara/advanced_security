@@ -11,6 +11,7 @@ class RSA:
         self.private_key = private_key
         self.public_key = public_key
         self.n = n
+        self.challenge = "Bravo ! Je suis épousplouffé par ta maîtrise du timing attack sur RSA !"
 
     def setKeys(self, private_key: int, public_key: int, n: int) -> None:
         self.private_key = private_key
@@ -20,6 +21,9 @@ class RSA:
     def getKeys(self) -> list:
         return [self.public_key, self.n], [self.private_key, self.n]
     
+    def exportPublicKey(self) -> list:
+        return [self.public_key, self.n]
+
     def createKeyPair(self, size: int) -> list:
         p = self.primary_nb_generator(2**(size//2-1), 2**size//2)
         q = self.primary_nb_generator(2**(size//2-1), 2**size//2)
@@ -28,8 +32,20 @@ class RSA:
     def encrypt(self, message: int) -> int:
         return self.fast_exp(message, self.public_key, self.n)
 
-    def decrypt(self, cipher: int) -> int:
+    def decrypt(self, cipher: int, private_key: int = None) -> int:
+        if private_key is not None:
+            return self.fast_exp(cipher, private_key, self.n)
         return self.fast_exp(cipher, self.private_key, self.n)
+    
+    def createChallenge(self) -> int:
+        challenge_int = int.from_bytes(self.challenge.encode(), 'big')
+        self.challenge = self.encrypt(challenge_int)
+        return self.challenge
+    
+    def decryptChallenge(self, tested_key: int) -> str:
+        decrypted_challenge_int = self.decrypt(self.challenge, private_key=tested_key)
+        decrypted_challenge_bytes = decrypted_challenge_int.to_bytes((decrypted_challenge_int.bit_length() + 7) // 8, 'big')
+        return decrypted_challenge_bytes.decode()
 
     def fast_exp(self, y: int, x: int, n: int) -> int:
         """
@@ -127,21 +143,20 @@ class RSA:
             A list [pgcd(a, b), inverse of a mod b, inverse of b mod a]
 
         """
-        assert a >= b, "a must be greater than b !"
+        if b > a:
+            a, b = b, a  # swap
+
         r_0, r_1 = a, b
         s_0, s_1 = 1, 0
         t_0, t_1 = 0, 1
-        q_1 = r_0 // r_1
+
         while r_1 != 0:
-            r_0, r_1 = r_1, r_0 - q_1 * r_1
-            s_0, s_1 = s_1, s_0 - q_1 * s_1
-            t_0, t_1 = t_1, t_0 - q_1 * t_1
-            if r_1 != 0:
-                q_1 = r_0 // r_1
-        tab = [r_0]
-        tab.append(s_0 if s_0 >= 0 else s_0 + b)
-        tab.append(t_0 if t_0 >= 0 else t_0 + a)
-        return tab
+            q = r_0 // r_1
+            r_0, r_1 = r_1, r_0 - q * r_1
+            s_0, s_1 = s_1, s_0 - q * s_1
+            t_0, t_1 = t_1, t_0 - q * t_1
+
+        return [r_0, s_0 % b, t_0 % a]
 
     def key_generator(self, p: int = 0, q: int = 0, e: int = 0) -> list:
         """
