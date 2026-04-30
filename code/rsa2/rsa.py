@@ -25,9 +25,9 @@ class RSA:
         return [self.public_key, self.n]
 
     def createKeyPair(self, size: int) -> list:
-        p = self.primary_nb_generator(2**(size//2-1), 2**size//2)
-        q = self.primary_nb_generator(2**(size//2-1), 2**size//2)
-        n, e, d = self.key_generator(p, q)
+        p = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
+        q = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
+        n, e, d = self.key_generator(p, q, size=size)
         self.setKeys(d, e, n)
         return [n, e, d]
 
@@ -160,7 +160,7 @@ class RSA:
 
         return [r_0, s_0 % b, t_0 % a]
 
-    def key_generator(self, p: int = 0, q: int = 0, e: int = 0) -> list:
+    def key_generator(self, p: int = 0, q: int = 0, e: int = 0, size: int = 512) -> list:
         """
         Generate public and private key for RSA
 
@@ -171,9 +171,9 @@ class RSA:
 
         """
         if p == 0:
-            p = self.primary_nb_generator(2**511, 2**512)
+            p = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
         if q == 0:
-            q = self.primary_nb_generator(2**511, 2**512)
+            q = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
 
         assert self.fermat_test(p), "p is not primary"
         assert self.fermat_test(q), "q is not primary"
@@ -187,7 +187,7 @@ class RSA:
         else:
             # Find a primary number e with phi_n
             while True:
-                e = random.randint(2**511, 2**512)
+                e = random.randint(2**(size - 1), 2**(size))
                 pgcd, _, d = self.Euclide(phi_n, e)
 
                 # If primary number with phi_n, claim public key
