@@ -56,10 +56,22 @@ The encryption process consists of taking a plaintext message $m$ and computing 
 // By construction, we have $c^d mod n = m^(e d) mod n$. As $e dot d equiv 1 mod phi(n)$, we can write $e dot d = 1 + k times phi(n)$ for some integer $k$, and thus $c^d mod n = m^(1 + k times phi(n)) mod n = m times (m^phi(n))^k mod n$.
 // By Euler's theorem, we have $m^phi(n) equiv 1 mod n$ for any integer $m$ that is coprime to $n$, and thus $c^d mod n = m times 1^k mod n = m mod n$, which means that the decryption process correctly recovers the original plaintext message.
 
+For convenience, we will use the following notations throughout the report:
+- $n$: the modulus, which is the product of two large prime numbers $p$ and $q$.
+- $e$: the public exponent, which is an integer that is coprime to $phi(n)$.
+- $d$: the private exponent, which is an integer such that $e dot d equiv 1 mod phi(n)$.
+- $m$: the plaintext message, which is an integer that is less than $n$.
+- $c$: the ciphertext, which is an integer that is less than $n$.
+
 == Timing attacks on RSA
 
+Before the exchange of symmetric keys, the client and the server need to perform an RSA encryption and decryption operation to establish a secure communication channel.
+The timing of these operations can be exploited by attackers to infer information about the private key.
+
 As mentioned earlier, the security of RSA relies on the difficulty of factoring large integers, but the implementation of RSA can introduce vulnerabilities that can be exploited by attackers.
-The goal of the attacker is to recover the unknown private key $d$ thanks to the knowledge of the public key $(n, e)$ and the ability to perform encryption and decryption operations using the RSA algorithm.
+The goal of the attacker is to recover the unknown private key $d$ thanks to the knowledge of the public key $(n, e)$ and the ability to perform encryption and decryption operations on the server using the RSA algorithm.
+
+== Square-and-multiply algorithm
 
 Timing attacks on RSA exploit the fact that the time it takes to perform certain operations in the RSA algorithm can vary based on the input values and the internal state of the algorithm.
 For example, the time it takes to perform the modular exponentiation operation $c^d mod n$ can vary based on the value of $d$ and the input ciphertext $c$.
@@ -82,9 +94,127 @@ def square_and_multiply(y, x, n):
 This code computes $y^x mod n$ using the square-and-multiply algorithm, which is an efficient method for performing modular exponentiation.
 Indeed, computing $y^x mod n$ for very large values of $x$ is computationally expensive.
 
-The base idea of this algorithm is that computing $y^x$ can be done by decomposing $x$ by powers of 2, then computing $y$ raised to these powers of 2 and multiplying the results together.
+The base idea of this algorithm is that computing $y^x$ can be done by taking the binary representation of $x$, which is basically the decomposition of $x$ into powers of 2, and then iteratively computing $y^x mod n$ by taking at each step the previous result and multiplying it by $y$ if the current bit of $x$ is 1, and then squaring the input $y$.
 
-For instance, if $x = 13 = 1101_2$, then $y^x mod n= y^13 mod n = (y^8 mod n) dot (y^4 mod n) dot (y^1 mod n)$.
+For instance, suppose we want to compute $6^13 mod 17$.
+- The binary representation of $13$ is $1101$, which corresponds to the powers of 2: $2^3 + 2^2 + 2^0$.
+- We start with $s = 1$ and $y = 6$.
+- For the first bit (1), we compute
+  - $s = (s dot y) mod 17 = (1 dot 6) mod 17 = 6$
+  - $y = y^2 mod 17 = 6^2 mod 17 = 2$.
+- For the second bit (0), we compute
+  - $s$ remains unchanged since the bit is 0, so $s = 6$.
+  - $y = y^2 mod 17 = 2^2 mod 17 = 4$. Note that here, $y^2$ corresponds to $y^2^2 = y^(2 dot 2) = y^4$.
+- For the third bit (1), we compute
+  - $s = (s dot y) mod 17 = (6 dot 4) mod 17 = 24 mod 17 = 7$
+  - $y = y^2 mod 17 = 4^2 mod 17 = 16$.
+- For the fourth bit (1), we compute
+  - $s = (s dot y) mod 17 = (7 dot 16) mod 17 = 112 mod 17 = 15$
+  - $y = y^2 mod 17 = 16^2 mod 17 = 256 mod 17 = 1$.
 
-So the efficiency of the algorithm comes from the fact that it iteratively computes $y^x mod n$ by performing small multiplication and squaring operations thanks to the modular properties instead of performing a single large exponentiation operation.
+So the result of $6^13 mod 17$ is $15$.
+The efficiency of the algorithm comes from the fact that it iteratively computes $y^x mod n$ by performing small multiplication and squaring operations thanks to the modular properties instead of performing a single large exponentiation operation.
 
+But the timing of this algorithm can vary based on the value of the exponent $x$ and the input $y$.
+Indeed, as seen in the above example, the algorithm performs an extra multiplication only when the bit of $x$ is 1, which can lead to a longer execution time compared to when the bit is 0.
+This variation in timing is the basis for timing attacks on RSA.
+
+== Exploiting timing variations
+
+Attackers can exploit the timing variations in the square-and-multiply algorithm to recover the private key $d$ by measuring the time it takes for the server to perform decryption operations.
+Note that the attacker must know the modulus $n$, which is public.
+
+First, the attacker sends multiple random ciphertexts $c$ to the server and measures the time it takes for the server to perform the decryption operation $c^d mod n$.
+
+Then for each bit of the private key $d$, the attacker guesses the value of the bit (0 or 1) and computes the expected timing of the decryption operation based on the guess for all the ciphertexts $c$.
+
+Finally, the attacker subtracts his obtained timing measurements from the timing measurements obtained from the server and analyzes the variance of the obtained results.
+If the variance is low, it means that the guess for the bit is correct, while if the variance is high, it means that the guess for the bit is incorrect.
+
+By repeating this process for all the bits of the private key $d$, the attacker can recover the entire private key.
+
+=== Mathematical analysis
+
+==== Probability of a correct guess
+
+We consider $N$ random ciphertexts $c_1, c_2, ..., c_N$ that the attacker sends to the server for decryption.
+
+Let $T_i$ be the time taken for the server to perform the decryption operation $c^d mod n$ for a given ciphertext $c_i$.
+
+Let $x_b$ be the guess for the $b$ first bits of the private key $d$.
+
+Let $t(c_i, x_b)$ be the time taken to perform the decryption operation according to the guess $x_b$ for the $b$ first bits of $d$.
+
+If the guess $x_b$ is correct, the timing error $T_i - t(c_i, x_b)$ will be small, indicating a good match between the observed and expected timings.
+We define $F$ as the probability to observe the timing error $T_i - t(c_i, x_b)$ if the guess $x_b$ is correct.
+As each timing measurement is independent, the probability of a correct guess for the $b$ first bits of $d$ is proportional to the product of the probabilities of $F$ for all the ciphertexts $c_i$:
+
+$ P(x_b) prop product_(i=1)^N F(T_i - t(c_i, x_b)) $
+
+Suppose that the $b - 1$ bits of $d$ are correct, and we want to guess the value of the $b$-th bit.
+We note $x_b_0$ and $x_b_1$ the guesses for the $b$-th bit being 0 and 1, respectively.
+
+The probability of having $x_b_1$ is:
+
+$ P(x_b_1) = (product_(i=1)^N F(T_i - t(c_i, x_b_1)))/(product_(i=1)^N F(T_i - t(c_i, x_b_0)) + product_(i=1)^N F(T_i - t(c_i, x_b_1))) $
+
+If $P(x_b_1) > 0.5$, it means that the guess $x_b_1$ is more likely to be correct than the guess $x_b_0$, and thus we can conclude that the $b$-th bit of $d$ is likely to be 1.
+
+Concretely, computing the exact distribution of $F$ is not feasible.
+
+==== Variance analysis
+
+Instead of computing the exact distribution of $F$, we can analyze the variance of the timing errors for the two guesses $x_b_0$ and $x_b_1$.
+
+Suppose the private key $d$ has $l$ bits.
+The time taken for the decryption operation can be denoted as $T_i = sum_(k = 1)^l t_k + epsilon$ with $t_k$ the time taken for the $k$-th step of the algorithm and $epsilon$ representing the timing noise caused by various factors such as system load, network latency, or other sources of randomness.
+
+Suppose that $x_(b - 1)$ is known to be correct.
+The attacker can compute the time taken for each step of the first $b - 1$ bits as $sum_(k = 1)^(b - 1) t_k$.
+
+The time difference is then:
+
+$ T_i - t(c_i, x_(b - 1)) = sum_k^l t_k + epsilon - sum_k^(b - 1) t_k = sum_(k = b)^l t_k + epsilon $
+
+If the guess $x_b$ is correct, the time difference will be:
+
+$ T_i - t(c_i, x_b) = sum_(k = b + 1)^l t_k + epsilon $
+
+And if the guess $x_b$ is incorrect, the time difference will be:
+
+$ T_i - t(c_i, x_b) = sum_k^l t_k + epsilon - (sum_k^(b - 1) t_k + t_b_("incorrect")) = sum_(k = b + 1)^l t_k + epsilon + (t_b_("correct") - t_b_("incorrect")) $.
+
+We can constate that the time difference for the correct guess $x_b$ is smaller than the time difference for the incorrect guess $x_b$ by a factor of $t_b_("correct") - t_b_("incorrect")$, meaning that the variance of the time differences for the correct guess $x_b$ will be smaller than the variance of the time differences for the incorrect guess $x_b$.
+
+So by analyzing the variance of the time differences for the two guesses $x_b_0$ and $x_b_1$, the attacker can determine which guess is more likely to be correct, and thus recover the bits of the private key $d$ one by one.
+
+==== Impact of previous errors on the variance
+
+Now, suppose that the $c$-th bit of $d$ is incorrect for some $c < b - 1$.
+The time difference for the correct guess $x_b$ will be:
+
+$ T_i - t(c_i, x_b) = sum_k^l t_k + epsilon - (sum_k^(c - 1) t_k + sum_(k = c)^b t_k) = sum_(k = b + 1)^l t_k + epsilon + (sum_(k = c)^b (t_k_("correct") - t_k_("incorrect"))) $
+
+We have $t_k$ which starts to be different for the correct and incorrect guesses for all the bits from $c$ to $b$ since the intermediate steps of the algorithm will be executed differently due to the error in the guess for the $c$-th bit, leading to a different $t_k$ for all the bits from $c$ to $b$ even if the guess for the $b$-th bit is correct.
+
+So when the guess $x_b$ has some previous errors, the variance of the correct guess will start to be similar to the variance of the incorrect guess.
+
+This property can be exploited to detect errors in the guess for the $b$-th bit.
+Indeed, attacker can keep track of the variance of the time differences and come back to a previous guess if the variance starts to be too similar for both the correct and incorrect guesses, indicating that there might be an error in the previous bits of the guess.
+
+== Code implementation
+
+I have tried to implement a simple version of the timing attack on RSA in Python, based on the square-and-multiply algorithm for modular exponentiation.
+
+The code contains two versions of the attack:
+- A simple version that does not take into account the impact of previous errors on the variance, which can lead to a higher number of errors in the recovered private key.
+- An improved version that manage a fixed size list of the best guesses for the private key, and that compute each time the new guess on all the list of best guesses, allowing to avoid the impact of previous errors on the variance and thus reduce the number of errors in the recovered private key.
+  Note that if the list of best guesses contains only guesses with some errors, the attack can still fail, but in practice, it allows to significantly reduce the number of errors in the recovered private key.
+
+However, the attack was not successful at all in recovering the private key, even with the improved version.
+Indeed, Python introduces a lot of noise in the timing measurements, such as:
+- The garbage collector, which can be triggered at any time and can cause significant delays in the execution of the code.
+- The optimization which can change the algorithm used for multiplication depending on the size of the numbers, leading to different timing measurements for the same operations.
+- The branch prediction that can cause variability in the timing measurements based on the input values and the internal state of the algorithm.
+- Other CPU and Python optimizations that can introduce variability in the timing measurements.
+These sources of noise have totally masked the timing variations caused by the square-and-multiply algorithm, making it impossible to recover the private key using the timing attack, even with a large number of repetitions of timing measurements (up to 4000 repetitions), the disabling of the garbage collector and the addition of a delay before each timing measurement to try to reduce the impact of the optimizations and branch prediction.
