@@ -216,5 +216,41 @@ Indeed, Python introduces a lot of noise in the timing measurements, such as:
 - The garbage collector, which can be triggered at any time and can cause significant delays in the execution of the code.
 - The optimization which can change the algorithm used for multiplication depending on the size of the numbers, leading to different timing measurements for the same operations.
 - The branch prediction that can cause variability in the timing measurements based on the input values and the internal state of the algorithm.
+- CPU cache effects that can cause variability in the timing measurements based on the memory access patterns of the algorithm.
 - Other CPU and Python optimizations that can introduce variability in the timing measurements.
-These sources of noise have totally masked the timing variations caused by the square-and-multiply algorithm, making it impossible to recover the private key using the timing attack, even with a large number of repetitions of timing measurements (up to 4000 repetitions), the disabling of the garbage collector and the addition of a delay before each timing measurement to try to reduce the impact of the optimizations and branch prediction.
+These sources of noise have totally masked the timing variations caused by the square-and-multiply algorithm, making it impossible to recover the private key using the timing attack, even with a large number of repetitions of timing measurements (up to 100k messages and 10000 repetitions in Rust), the disabling of the garbage collector and the addition of a delay before each timing measurement to try to reduce the impact of the optimizations and branch prediction.
+
+== Fermat's factorization method
+
+The private key $d$ in RSA is computed based on the prime factors $p$ and $q$ of the modulus $n$.
+So another way to recover the private key $d$ is to factor the modulus $n$ into its prime factors $p$ and $q$, and then compute $d$ using the formula $d equiv e^(-1) mod phi(n)$ with $phi(n) = (p - 1)(q - 1)$ the Euler's totient function.
+The inverse of $e$ modulo $phi(n)$ can be computed using the Extended Euclidean Algorithm, which is an efficient method for computing the greatest common divisor of two integers and their multiplicative inverse.
+
+But factoring large integers is a computationally hard problem, and the security of RSA relies on this fact.
+
+However, if $p$ and $q$ are close to each other, meaning that the difference between $p$ and $q$ is small, then it becomes easier to factor $n$ using Fermat's factorization method.
+
+Fermat's factorization method relies on the fact that $n$ is a product of two odd primes $p$ and $q$.
+As $p$ and $q$ are odd, there always exist an integer number which is at the middle of $p$ and $q$, which is $x = (p + q)/2$.
+Then, we consider $y$ as the distance between $x$ and $p$ (or $q$):
+$ y = x - p = q - x $
+
+So we have:
+- $p = x - y$
+- $q = x + y$
+
+If we express $n$ in terms of $x$ and $y$, we get:
+$ n = p times q = (x - y)(x + y) = x^2 - y^2 $
+
+From this equation, we can deduce that $y^2 = x^2 - n$.
+
+The Fermat's factorization method consists in finding the smallest integer $x$ such that $y^2 = x^2 - n$ is a perfect square, meaning that $y$ is an integer.
+
+Once we find such an integer $x$, we can compute $y$ as $y = sqrt(x^2 - n)$, and then we can obtain the prime factors $p$ and $q$ as described above.
+
+So the algorithm can be summarized as follows:
+
+1. Compute $x = ceil(sqrt(n))$.
+2. Compute $y^2 = x^2 - n$.
+3. If $y^2$ is a perfect square, then $y = sqrt(y^2)$ and we can compute $p = x - y$ and $q = x + y$.
+4. Otherwise, increment $x$ and repeat from step 2.

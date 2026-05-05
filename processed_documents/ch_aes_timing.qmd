@@ -1,0 +1,613 @@
+---
+title: "Attaques temporelles par cache sur AES"
+format: 
+  html:
+    embed-resources: true
+    theme: darkly
+---
+
+## Introduction : le problème fondamental
+
+Les attaques par canal auxiliaire (Side-Channel Attacks) constituent une famille d'attaques qui ne s'appuient pas sur des failles mathématiques dans un algorithme cryptographique, mais sur des **informations physiques ou comportementales** observables lors de son exécution : temps de calcul, consommation électrique, rayonnements électromagnétiques, etc.
+
+Ce chapitre est consacré à l'une des attaques de ce type les plus redoutables : l'**attaque temporelle par cache** (Cache-Timing Attack), démontrée avec succès contre AES par Daniel J. Bernstein en 2005.
+
+::: {.callout-important title="Résultat central"}
+Il est possible de récupérer une clé AES complète en observant uniquement les **temps de réponse réseau** d'un serveur situé sur une autre machine, sans jamais accéder directement à la clé.
+:::
+
+### Portée de l'attaque
+
+L'attaque présentée dans ce cours a été testée sur plusieurs architectures :
+
+- AMD Athlon
+- Intel Pentium III
+- Intel Pentium M
+- IBM PowerPC RS64 IV
+- Sun UltraSPARC III
+
+Sur **toutes** ces architectures, une variabilité temporelle comparable a été observée dans l'implémentation OpenSSL d'AES. L'attaque n'est donc pas spécifique à un processeur.
+
+::: {.callout-tip title="Intuition"}
+Si le temps d'exécution d'un chiffrement dépend des données secrètes (la clé), alors en mesurant ce temps suffisamment de fois, on peut remonter à la clé. C'est exactement ce que permet la variation de temps liée aux accès mémoire en cache.
+:::
+
+### Ce que cette attaque n'est pas
+
+L'implémentation OpenSSL d'AES utilisée n'est **pas** défectueuse ou mal écrite. Le problème vient du design même d'AES, qui repose structurellement sur des accès à des tables (S-boxes) dont le temps d'accès dépend des données — et donc de la clé.
+
+---
+
+## Rappel sur AES
+
+### Structure générale
+
+AES (Advanced Encryption Standard) chiffre un bloc de 16 octets (le texte clair `n`) à l'aide d'une clé de 16 octets `k`. Le résultat est le texte chiffré `AES_k(n)`.
+
+L'algorithme s'appuie sur deux tables constantes de 256 octets :
+
+- `S` = (99, 124, 119, 123, 242, …)
+- `S'` = (198, 248, 238, 246, 255, …)
+
+Ces deux tables sont étendues en **quatre tables de 1024 octets** `T0, T1, T2, T3` définies par :
+
+```
+T0[b] = (S'[b], S[b], S[b], S[b] ⊕ S'[b])
+T1[b] = (S[b] ⊕ S'[b], S'[b], S[b], S[b])
+T2[b] = (S[b], S[b] ⊕ S'[b], S'[b], S[b])
+T3[b] = (S[b], S[b], S[b] ⊕ S'[b], S'[b])
+```
+
+où `⊕` désigne le XOR (addition bit à bit modulo 2).
+
+### Déroulement du calcul
+
+AES travaille avec deux tableaux auxiliaires de 16 octets, `x` et `y` :
+
+- `x` est initialisé à `k`
+- `y` est initialisé à `n ⊕ k`
+
+AES exécute ensuite **10 rounds**. À chaque round :
+
+1. `x` est modifié à partir de la clé (expansion de clé)
+2. `y` est modifié en combinant des accès aux tables `T0, T1, T2, T3`
+
+La mise à jour de `y` ressemble à :
+
+```
+y0 ← T0[y0[0]] ⊕ T1[y1[1]] ⊕ T2[y2[2]] ⊕ T3[y3[3]] ⊕ x0
+y1 ← T0[y1[0]] ⊕ T1[y2[1]] ⊕ T2[y3[2]] ⊕ T3[y0[3]] ⊕ x1
+...
+```
+
+::: {.callout-note title="À retenir"}
+Les accès aux tables `T0, T1, T2, T3` utilisent des **indices dépendant des données** (le texte clair XOR la clé). C'est précisément ce qui crée la fuite temporelle.
+:::
+
+### Le problème clé : les indices variables
+
+La première opération d'AES effectue notamment le calcul `T0[k[0] ⊕ n[0]]`. L'indice de cette lecture mémoire est `k[0] ⊕ n[0]`, qui dépend à la fois de la clé secrète et du texte clair.
+
+Si le temps d'accès à `T0[i]` dépend de `i` (ce que nous verrons en détail), alors le temps total d'AES est corrélé à `k[0] ⊕ n[0]`, ce qui permet d'inférer `k[0]`.
+
+### Expansion de clé (Key Scheduling)
+
+L'évolution de `x` (dérivée de la clé) est **indépendante de `n`**. Il est donc possible de pré-calculer les 11 valeurs de `x` (176 octets au total) et de les réutiliser pour chaque chiffrement.
+
+---
+
+## Description de l'attaque
+
+### Principe général
+
+L'idée centrale est la suivante :
+
+1. L'attaquant observe les **temps de traitement** du serveur pour de nombreux textes clairs `n`
+2. Il agrège les temps par valeur de `n[b]` (un octet du texte clair)
+3. Il observe quelle valeur de `n[b]` maximise le temps moyen
+4. En connaissant, grâce à des expériences avec des clés connues, quelle valeur de `k[b] ⊕ n[b]` maximise le temps, il déduit `k[b]`
+
+::: {.callout-tip title="Intuition"}
+Imaginez que charger la case numéro 8 d'un tableau prend toujours un peu plus longtemps. Si AES est le plus lent quand `n[13] = 147`, et que l'on sait par expérimentation que le temps est maximal quand l'indice vaut 8, alors `k[13] ⊕ 147 = 8`, soit `k[13] = 155`.
+:::
+
+### Hypothèses exploitées
+
+L'attaque repose sur trois hypothèses :
+
+- Le **temps d'accès à une case mémoire** dépend de son indice (à cause du cache)
+- Le **temps total d'AES** est bien corrélé au temps de cet accès particulier
+- Les **timings réseau** transmettent suffisamment d'information malgré le bruit
+
+Ces hypothèses sont toutes vérifiées en pratique sur les architectures testées.
+
+### Résistance au bruit
+
+L'ajout de bruit (variabilité réseau, horodatages moins précis) ne stoppe pas l'attaque : il suffit d'**augmenter le nombre de mesures**. La loi des grands nombres garantit que la moyenne des timings converge vers la vraie valeur statistique.
+
+---
+
+## Mise en œuvre expérimentale
+
+### Configuration du serveur cible
+
+Le serveur expérimental (`server.c`) :
+
+- Reçoit des paquets UDP de longueur variable
+- Chiffre le nonce (les 16 premiers octets) avec OpenSSL AES
+- Renvoie deux horodatages haute précision (issus du compteur de cycles CPU)
+
+```c
+*(unsigned int *) (out + 32) = timestamp();
+AES_encrypt(in, workarea, &expanded);
+*(unsigned int *) (out + 36) = timestamp();
+```
+
+La différence entre les deux horodatages donne le temps de chiffrement en cycles CPU.
+
+### Environnement de test
+
+- Processeur : Pentium III à 850 MHz
+- OS : FreeBSD 4.8
+- Compilateur : GCC 2.95.4 avec `-O3`
+- Bibliothèque : OpenSSL 0.9.7a
+
+### Programme d'étude (`study.c`)
+
+Le programme d'étude envoie des paquets aléatoires et accumule des statistiques. Pour chaque couple `(b, n[b])` — soit 16 × 256 = 4096 combinaisons — il calcule :
+
+- Le nombre de paquets reçus
+- Le temps moyen de traitement
+- L'écart-type
+- La différence par rapport à la moyenne globale
+- L'estimation de l'écart sur cette différence
+
+Exemple de sortie :
+
+```
+13 400 8 4196901 3087.895 129.512 3.108 0.063
+```
+
+Ce qui signifie :
+
+- Octet `b = 13`, taille de paquet 400 octets
+- Valeur de `n[13] = 8`
+- 4 196 901 paquets observés
+- Temps moyen : 3087,895 cycles
+- Écart-type : 129,512 cycles
+- Différence à la moyenne : +3,108 cycles
+- Estimation de l'incertitude : ±0,063 cycles
+
+::: {.callout-note title="À retenir"}
+L'incertitude sur la différence est ≈ σ / √N. Avec σ ≈ 130 cycles et N ≈ 4,2 millions, l'incertitude est ≈ 0,063 cycles, soit un rapport signal/bruit très favorable.
+:::
+
+### Résultats de l'étude préliminaire (clé connue = 0)
+
+Pour `b = 13` avec des paquets de 400 octets :
+
+- Maximum observé : +3,108 cycles pour `n[13] = 8`
+- Deuxième maximum : +2,763 cycles pour `n[13] = 7`
+
+Conclusion : pour tout `k`, la valeur `n[13]` qui maximise le temps est `k[13] ⊕ 8`. En connaissant ce profil de référence, l'attaquant peut déduire `k[13]`.
+
+### Corrélations croisées
+
+Pour aller plus loin, Bernstein calcule, pour chaque décalage `i` :
+
+```
+corr(i) = Σ_{j} t(j) · u(i ⊕ j)
+```
+
+où `t(j)` et `u(j)` sont les temps moyens mesurés lors de deux séries indépendantes pour `n[13] = j`.
+
+- `corr(0)` ≈ 36 cycles² au-dessus de la moyenne → forte corrélation pour `i = 0` (bon signe)
+- Les autres `corr(i)` sont ≤ 11 cycles² → distinguables statistiquement
+
+Cela permet de localiser précisément `k[13]` et, pour d'autres octets, de restreindre les candidats à un sous-ensemble.
+
+---
+
+## Exécution de l'attaque complète
+
+### Étape 1 : Obtenir le chiffré du zéro
+
+L'attaquant envoie un paquet et récupère le chiffré de la valeur zéro par le serveur :
+
+```
+32 6b 9e f2 94 17 1b 46 a3 55 8b 59 6c 06 fa 7f
+```
+
+Ce chiffré servira à **valider** la clé trouvée.
+
+### Étape 2 : Collecter les timings d'attaque
+
+L'attaquant envoie 2²⁵ paquets aléatoires de 800 octets au serveur (≈ 160 minutes) et collecte les statistiques dans `attack.800`.
+
+### Étape 3 : Corrélation avec les timings de référence
+
+Le programme `correlate.c` croise les timings de référence (clé = 0) avec les timings d'attaque :
+
+```bash
+(tail -4096 study.800; tail -4096 attack.800) | ./correlate >> attack
+```
+
+Résultats obtenus (extrait) :
+
+```
+ 1  3 a9          → k[3] = 0xa9 = 169 (certain)
+ 1 15 35          → k[15] = 0x35 = 53 (certain)
+ 8  7 a7 a0 ...   → k[7] ∈ {8 candidats}
+```
+
+### Étape 4 : Affiner avec d'autres tailles de paquets
+
+En répétant avec des paquets de 600 et 400 octets, certains octets de clé restant ambigus sont précisés. Les différentes tailles de paquets induisent des motifs de cache différents, révélant des bits complémentaires.
+
+### Étape 5 : Recherche exhaustive résiduelle
+
+Le programme `search.c` parcourt les clés compatibles avec toutes les contraintes recueillies, et vérifie chaque candidat en chiffrant le zéro :
+
+```bash
+./search < attack
+```
+
+Résultat en 1 minute (~2³⁷ cycles Athlon) :
+
+```
+The key is 43 74 84 a9 89 b1 62 a7 bb 7f d0 3d 9e ec 3d 35.
+```
+
+La clé a été retrouvée avec succès et confirmée en inspectant directement le serveur.
+
+::: {.callout-important title="Bilan de l'attaque"}
+Sans jamais avoir accès direct à la clé, en passant uniquement par le réseau, l'attaquant a récupéré les 128 bits de la clé AES. L'attaque a nécessité environ 2²⁵ paquets de 800 octets et 2²⁷ paquets de 400 octets.
+:::
+
+---
+
+## Erreurs dans le processus de standardisation d'AES
+
+### Ce que savait le NIST
+
+Le NIST (National Institute of Standards and Technology) était conscient des attaques temporelles lors du développement d'AES. Son rapport consacre plusieurs pages aux attaques par canal auxiliaire (timing et puissance).
+
+### L'erreur critique
+
+Le NIST a affirmé dans son rapport :
+
+> « Table lookup: not vulnerable to timing attacks »
+
+Cette affirmation est **incorrecte**. Les accès à des tables avec des indices variables ne prennent pas un temps constant, car leur temps dépend de la présence ou non de la ligne mémoire dans le cache.
+
+### Conséquence sur la sélection d'AES
+
+Le NIST a conclu que Rijndael (AES) offrait un **avantage majeur de vitesse** sur ses concurrents lorsque des protections contre les attaques par canal auxiliaire sont requises — une conclusion fondée directement sur l'hypothèse erronée que les accès à des tables prennent un temps constant.
+
+Les concepteurs de Rijndael eux-mêmes ont écrit que la table lookup « n'est pas susceptible d'une attaque temporelle » et ont conclu que Rijndael était « relativement facile à sécuriser ».
+
+::: {.callout-warning title="Leçon de sécurité"}
+Aucun des quinze candidats à la compétition AES ne fournit de hautes performances sur tous les processeurs populaires **sans** utiliser des instructions à timing dépendant des données. La standardisation d'AES repose donc sur une hypothèse incorrecte concernant les accès mémoire.
+:::
+
+---
+
+## Le problème de l'écriture d'un logiciel AES en temps constant
+
+### Définition du temps constant
+
+Un logiciel AES est dit **en temps constant** (Constant-Time) si son temps d'exécution est indépendant de la clé et du texte clair.
+
+Il est relativement facile d'écrire un AES en temps constant mais lent : les valeurs `S[b]` et `S'[b]` peuvent être calculées à partir de formules arithmétiques simples (XOR, décalages constants). Mais ce code est bien trop lent pour être utilisable dans des applications réelles.
+
+::: {.callout-tip title="Intuition"}
+Le dilemme est clair : soit on utilise des tables (rapide mais vulnérable aux timing attacks par cache), soit on recalcule les S-boxes à la volée (lent mais sûr).
+:::
+
+### Comment reconnaître un logiciel en temps constant ?
+
+#### Méthode visuelle
+
+On peut collecter des timings pour de nombreux couples (clé, entrée), les convertir en blocs colorés, et observer si le motif est uniforme.
+
+- **Logiciel de l'auteur** : tous les blocs sont visuellement identiques → temps constant
+- **OpenSSL** : variabilité énorme entre les blocs → temps non constant
+
+#### Limites de cette méthode
+
+Même un logiciel qui passe ce test visuel n'est pas nécessairement en temps constant. Le problème décrit dans la Section "Interférence Load-Store" dépend de la disposition des variables en mémoire et peut passer inaperçu.
+
+#### Revue de code CPU
+
+Une autre approche est l'analyse détaillée des temps de chaque instruction. Mais la plupart des fabricants de CPU **documentent très mal** leurs puces. Par exemple, les conflits de banques de cache de l'Athlon n'apparaissent dans aucune documentation AMD, alors qu'ils sont pourtant significatifs.
+
+---
+
+## Les sources de variabilité temporelle
+
+### Problème 1 : Sauter une opération est plus rapide que l'exécuter
+
+Les **branchements conditionnels** (exécuter ou non un calcul selon les données) sont la source la plus évidente de timing variable.
+
+Exemple historique : le système TENEX comparait un mot de passe caractère par caractère en s'arrêtant à la première différence. Un attaquant pouvait mesurer le temps de comparaison pour déterminer le premier caractère incorrect.
+
+Dans le contexte d'AES : certaines implémentations calculaient `S[b]`, puis `2·S[b]`, puis appliquaient un XOR conditionnel si `S[b] ≥ 128`. Cette branche crée une variabilité temporelle.
+
+Une alternative sans branche :
+
+```c
+X = S >> 7;
+X |= (X << 1);
+X |= (X << 3);
+Sprime = (S << 1) ^ X;
+```
+
+::: {.callout-note title="À retenir"}
+Ce problème n'affecte pas les implémentations AES hautes performances pour processeurs modernes, car celles-ci pré-calculent les tables T0..T3 et exécutent un code en ligne droite (straight-line). Mais le problème des accès mémoire reste entier.
+:::
+
+---
+
+### Problème 2 : Le cache est plus rapide que la DRAM
+
+#### Principe du cache
+
+Les processeurs modernes maintiennent un cache : une mémoire rapide et limitée qui stocke les lignes mémoire récemment accédées. Une **ligne de cache** (cache line) est typiquement de 32 à 64 octets.
+
+- Athlon : lignes de 64 octets, 327 680 octets de cache (5120 lignes)
+- Pentium III : lignes de 32 octets, 524 288 octets de cache (16 384 lignes)
+
+#### La fuite temporelle
+
+Si `T0[0]` est en cache mais `T0[64]` ne l'est pas, alors :
+
+- Lire `T0[b]` avec `b = 0` sera **rapide** (cache hit)
+- Lire `T0[b]` avec `b = 64` sera **lent** (cache miss)
+
+Le temps d'accès révèle donc de l'information sur `b`, et donc sur `k[b] ⊕ n[b]`.
+
+#### Conseil pour les implémenteurs
+
+La solution évidente est de s'assurer que toutes les S-boxes AES sont en cache **pendant toute la durée** du chiffrement. Mais c'est beaucoup plus difficile qu'il n'y paraît (voir les problèmes suivants).
+
+---
+
+### Problème 3 : Le cache L1 est plus rapide que le cache L2
+
+Les processeurs modernes ont **plusieurs niveaux de cache** :
+
+| Processeur      | L1 (octets) | L2 (octets) | Latence L1 | Latence L2  |
+|-----------------|-------------|-------------|------------|-------------|
+| Athlon          | 65 536      | 262 144     | 3 cycles   | ~11 cycles  |
+| Pentium III     | 16 384      | 524 288     | —          | —           |
+| Pentium 4       | 8 192       | —           | —          | —           |
+| PowerPC RS64 IV | 131 072     | —           | —          | —           |
+| UltraSPARC III  | 65 536      | —           | —          | —           |
+
+Même si toutes les lignes des S-boxes sont en cache L2, les accès en L1 sont significativement plus rapides. La fuite existe donc aussi entre L1 et L2.
+
+::: {.callout-tip title="Intuition"}
+Le cache est une hiérarchie : plus on est proche du processeur, plus c'est rapide. Chaque niveau de cette hiérarchie peut introduire une variabilité temporelle observable.
+:::
+
+#### Conseil pour les concepteurs de CPU
+
+Bernstein propose d'ajouter une instruction CPU dédiée `L1-table-lookup` qui :
+
+1. Garantit que toute la table est en cache L1
+2. Charge l'entrée demandée en un **nombre constant de cycles**
+
+---
+
+### Problème 4 : L'associativité du cache est limitée
+
+#### Qu'est-ce que l'associativité ?
+
+Un cache n'est pas entièrement associatif. Dans un cache **2-way associatif** comme celui de l'Athlon, chaque ligne mémoire ne peut être placée qu'à **2 emplacements possibles** dans le cache : tous les blocs dont l'adresse modulo 32 768 est identique se disputent les mêmes 2 emplacements.
+
+Si trois blocs ayant la même adresse modulo 32 768 sont accédés, le premier est éjecté.
+
+| Processeur      | Associativité L1 | Adresses concurrentes |
+|-----------------|------------------|----------------------|
+| Athlon          | 2-way            | modulo 32 768        |
+| Pentium III/4   | 4-way            | modulo 4 096         |
+| PowerPC G4      | 8-way            | modulo ?             |
+| UltraSPARC II   | 1-way (direct)   | modulo ?             |
+
+#### Impact sur AES
+
+Même si le logiciel AES initialise les S-boxes en cache avant le chiffrement, les accès à d'autres variables (clé, pile, entrée/sortie) peuvent **éjecter** des lignes de S-boxes si elles partagent la même position modulo la taille du cache.
+
+#### Conseil pour les implémenteurs
+
+- Contrôler la disposition en mémoire de toutes les variables : les placer consécutivement pour éviter les collisions modulo la taille du cache.
+- Utiliser des S-boxes compressées (2048 octets, avec des entrées 8 octets) pour réduire l'empreinte mémoire.
+- Si des variables doivent être chargées depuis des emplacements non contrôlés, reconsidérer les S-boxes en cache avant chaque chiffrement.
+
+---
+
+### Problème 5 : Le code peut être interrompu
+
+#### Le problème des interruptions
+
+Même si toutes les S-boxes sont en cache L1 au début du chiffrement, une **interruption** (interrupt) en cours d'exécution peut éjecter des lignes de S-boxes pour laisser place aux données utilisées par le gestionnaire d'interruption.
+
+Exemples d'interruptions :
+
+- **Interruption réseau ou disque** : le pilote du noyau charge ses propres données en cache
+- **Interruption horloge** : le système d'exploitation peut préempter le processus
+- **Hyperthreading (Pentium 4)** : un autre thread peut éjecter des lignes de cache pendant un cycle creux
+
+::: {.callout-important title="Attaque Osvik-Tromer"}
+Cette variante d'attaque, développée indépendamment en 2005, récupère des bits de clé **sans recevoir aucune donnée directement du chiffrement** : elle détecte les cache misses d'AES en mesurant les timings d'un autre processus concurrent.
+:::
+
+#### Solutions possibles
+
+- **Désactiver l'hyperthreading** (solution partielle et spécifique au Pentium 4)
+- **Intégrer le logiciel cryptographique dans le noyau** : le noyau peut désactiver les interruptions pendant le chiffrement
+- Aucune solution satisfaisante pour le code hors noyau dans les systèmes actuels
+
+---
+
+### Problème 6 : Les stores peuvent interférer avec les loads
+
+#### Le phénomène
+
+Sur certains processeurs comme le Pentium III et le Pentium M, un chargement (load) depuis le cache L1 prend légèrement plus de temps s'il implique la **même ligne de cache (modulo 4096)** qu'un store récent.
+
+Cela signifie que même si toutes les S-boxes sont en cache L1, le temps d'accès peut varier selon l'indice, car certains indices partagent une ligne de cache avec des données récemment écrites sur la pile.
+
+#### Impact sur AES
+
+Tout le code AES existant pour Pentium III qui utilise la pile dans la boucle principale est potentiellement vulnérable à cette interférence, car les positions de pile peuvent chevaucher les lignes de S-boxes modulo 4096.
+
+#### Solution proposée par Bernstein
+
+Ajuster le pointeur de pile (ESP) en début de chiffrement pour placer les 208 octets de la pile juste **avant** les 2048 octets de S-boxes modulo 4096 :
+
+```asm
+aes_ppro:
+  eax = esp
+  eax -= aes_ppro_constants
+  eax &= 4096
+  eax += 208
+  esp -= eax
+  ...
+  esp += eax
+  return
+```
+
+---
+
+### Problème 7 : Le débit des banques de cache est limité
+
+#### Le phénomène
+
+Sur l'Athlon, chaque ligne de cache de 64 octets est divisée en **8 banques** de 8 octets. Habituellement, deux loads peuvent être effectués par cycle — sauf si les deux loads accèdent à la **même banque** de deux lignes différentes (ayant des adresses différentes modulo 32 768). Dans ce cas, le second load doit attendre un cycle.
+
+Ce phénomène existe aussi sur le Pentium 1 et l'Opteron.
+
+::: {.callout-tip title="Intuition"}
+Le cache est organisé en banques parallèles. Si deux accès simultanés tombent sur la même banque, il y a un conflit et l'un des accès est retardé. L'indice du tableau détermine quelle banque est accédée — d'où la fuite.
+:::
+
+#### Solutions pour l'Athlon
+
+**Approche 1 : Contrôler les banques**
+
+Espacer les entrées `Ti` de 64 octets pour que chaque load utilise toujours la même banque. Inconvénient : tables 8× plus grandes, index à multiplier par 64, chargement initial plus coûteux.
+
+**Approche 2 : Sérialiser les loads**
+
+L'Athlon distribue les instructions sur trois unités d'exécution. On peut arranger les instructions pour que tous les loads soient sur la **même unité d'exécution**, garantissant qu'ils n'ont jamais lieu simultanément.
+
+Techniques d'alignement utilisées par Bernstein :
+
+- Groupes de 3 instructions, chaque load en tête de groupe
+- Interdire aux groupes de croiser une frontière de 16 octets
+- Utiliser des no-ops de tailles précises : `0x90` (1 octet), `0x66 0x90` (2 octets), `lea (%esp),%esp` (3 octets), etc.
+- Ajouter des préfixes d'instructions pour éviter des no-ops supplémentaires
+
+---
+
+## Conseils aux concepteurs de CPU
+
+Plusieurs recommandations émergent de cette analyse pour améliorer la sécurité des futurs processeurs :
+
+**Documentation**
+
+- Documenter exhaustivement toutes les variations de timing des instructions
+- Garantir l'absence de toute autre variation non documentée
+- Publier des simulateurs CPU précis au cycle près
+
+**Nouvelles instructions**
+
+- Ajouter une instruction `L1-table-lookup` qui :
+  - Garantit que toute la table est en cache L1
+  - Effectue le chargement en un nombre constant de cycles
+  - Se redémarre après une interruption
+- Ajouter des instructions de support natif pour AES (ce qui a finalement abouti à AES-NI, introduit par Intel en 2010)
+
+---
+
+## Alternatives cryptographiques résistantes
+
+Certains algorithmes cryptographiques sont naturellement immunisés contre ce type d'attaque car ils n'utilisent **pas de S-boxes** et sont construits à partir d'opérations à temps constant :
+
+| Algorithme | Type        | Operations utilisées                        |
+|------------|-------------|---------------------------------------------|
+| TEA        | Chiffrement | Additions 32 bits, rotations constantes     |
+| SHA-256    | Hachage     | Additions 32 bits, rotations constantes     |
+| Helix      | Chiffrement | Additions 32 bits, rotations constantes     |
+| Salsa20    | Chiffrement | Additions 32 bits, rotations constantes, XOR|
+
+::: {.callout-note title="À retenir"}
+Ce papier peut être interprété comme un appel à la recherche sur des fonctions cryptographiques construites exclusivement à partir d'opérations à temps constant. C'est l'une des motivations à l'origine du développement de Salsa20/ChaCha20, qui est aujourd'hui largement déployé (TLS 1.3, WireGuard, etc.).
+:::
+
+---
+
+## Pistes de recherche futures
+
+Bernstein identifie plusieurs axes pour améliorer ou étendre l'attaque :
+
+**Réduction du nombre de paquets nécessaires**
+
+- Commencer à deviner des clés dès que le nombre de candidats est assez petit, plutôt qu'attendre que toutes les possibilités soient éliminées
+- Modéliser les interactions entre octets : `time(n) ≈ Σ_b t(b, n[b])`
+- Adapter dynamiquement la distribution des `n[b]` envoyés pour maximiser l'information obtenue
+
+**Extension à d'autres modes opératoires**
+
+- Attaquer en analysant le dernier round d'AES plutôt que le premier, ce qui permettrait des attaques sur des entrées structurées (mode compteur, CBC avec plaintext contrôlé)
+
+**Maximisation du bruit de cache**
+
+- En contrôlant quelles lignes de cache sont présentes avant chaque requête, il est possible de maximiser la variabilité temporelle, réduisant considérablement le nombre de paquets nécessaires
+
+**Extension à d'autres serveurs et CPU**
+
+- Appliquer la même technique à d'autres implémentations et architectures — la difficulté d'écrire un AES en temps constant laisse supposer qu'aucun serveur AES n'est immunisé
+
+---
+
+## Récapitulatif des sources de variabilité
+
+```{mermaid}
+flowchart TD
+    A[Accès S-box avec indice variable] --> B[Variabilité temporelle]
+    B --> C1[Cache DRAM vs Cache]
+    B --> C2[Cache L1 vs L2]
+    B --> C3[Associativité limitée]
+    B --> C4[Interruptions OS]
+    B --> C5[Interférence Load-Store]
+    B --> C6[Conflits de banques cache]
+    C1 --> D[Fuite d'information sur la clé]
+    C2 --> D
+    C3 --> D
+    C4 --> D
+    C5 --> D
+    C6 --> D
+    D --> E[Récupération complète de la clé AES]
+```
+
+---
+
+## Conclusion
+
+Ce chapitre a présenté en détail une attaque temporelle par cache contre AES, en couvrant :
+
+- La **théorie** : pourquoi les accès mémoire dépendants des données créent une fuite temporelle
+- La **pratique** : comment collecter, analyser et exploiter ces timings réseau
+- Les **obstacles** à l'écriture d'un AES en temps constant : pas moins de 7 problèmes distincts identifiés
+- Les **erreurs institutionnelles** : comment le NIST a mal évalué la résistance d'AES aux attaques temporelles
+
+::: {.callout-important title="Message central"}
+Utiliser des données secrètes comme indice d'un tableau est une **recette pour le désastre** dans tout logiciel cryptographique destiné à des systèmes où le temps d'exécution est observable par un adversaire. La seule solution sûre est le logiciel en temps constant — ce qui est extrêmement difficile à réaliser pour AES sur des processeurs génériques.
+:::
+
+La leçon durable de ce travail est double :
+
+1. **Pour les concepteurs d'algorithmes** : préférer des primitives construites à partir d'opérations nativement en temps constant (additions, rotations, XOR)
+2. **Pour les implémenteurs** : ne jamais supposer que les accès mémoire sont en temps constant sans vérification expérimentale et analyse micro-architecturale approfondie

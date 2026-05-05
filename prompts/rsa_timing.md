@@ -1,4 +1,4 @@
-Heyyy !!! You're an expert in cryptography and side-channel attacks, and you want to create a mini-project to demonstrate timing attacks on RSA.
+Heyyy !!! You're an expert in cryptography and side-channel attacks, and you want to create a mini-project to demonstrate timing attacks on RSA fast exponentiation.
 
 I want that you study the Square-and-Multiply algorithm for RSA decryption, and how it can leak information through timing variations.
 
@@ -13,8 +13,6 @@ def square_and_multiply(y, x, n):
     while x > 0:
         if (x % 2) == 1:  # If exponent is odd
             R = (s * y) % n
-            # Add extra time for multiplication step if bit is 1 in a first simple implementation
-            time.sleep(0.001)  # Simulate extra time for multiplication
         else:
             R = s
         x = x >> 1  # Divide exponent by 2
@@ -61,7 +59,45 @@ Version 2 (error correction):
 - We update the list of candidates by keeping only those with the lowest variances. For example, we can keep the top 20% of candidates with the lowest variances, or keep a fixed number of candidates (e.g., 10) with the lowest variances.
 - We repeat this process for each bit b, refining our candidates based on the variance analysis until we narrow down to the most likely value for each bit of the exponent.
 
-The code must implement both versions.
+The code must implement both versions in RUST.
+
+The code must be:
+- The most simple possible, with numpy style documnentation and comments to explain the logic.
+- Organized for clarity.
+- As small as possible, while still being functional and demonstrating the attack effectively.
+- Meaningful variable names and modular functions to enhance readability and maintainability.
+
+You must avoid all optimizations that could make the timing measurements less accurate.
+The key to test are the 2048 bits keys following (so use the good library to manage big integers which is not constent time for multiplication and don't have optimizations...):
+p_A = 13109499994810966779468866046493465498469807493634236479294124421385342920350717814807375283698575766763256101470694189234369358996750113963585617491399169
+q_A = 9497561827984502554523100157901534504433126034087863778629488755692649311435921364240405549590851856701860175924335776598684751639633322074428628372725777
+n_A = p_A * q_A
+e_A = 4574830074548708213
+m_1 = 123456789132456789
+d_A = 1685394382767324790326942621450485552187209875614438478305225564629345944620726038114923060947436330701451901921041511234432041036987266468290187679773130363479895993621867708066144608084390089775045890165825736468637468786667820591136139480545376198614216373031208691260339805721685482401743494212035728605
+
+The message to decode is "Bravo ! Je suis épousplouffé par ta maîtrise du timing attack sur RSA !", which is represented as an integer (m_1) that is encrypted with the public key (n_A, e_A) and that we want to decrypt using the recovered private key (n_A, d_A).
+
+I want to be able to choose the number of samples to collect and the number of bits to recover.
+To increase the accuracy of the attack, you can perform multiple measurements to amplify the timing differences between the two hypotheses.
+I want to be able to choose the number of repetitions.
+
+I want that you print the progress of the attack in real-time, showing which bit is currently being recovered, the variance analysis results for each hypothesis, and the current list of candidate exponent values (for version 2).
+I want also that you tell each time if the recovered bit is correct or not, based on the known private key, to validate the attack's progress.
+
+Please, for the accuracy of the method, disable all optimizations such as branch prediction, loop unrolling etc. to ensure that the timing measurements reflect the actual execution time of the algorithm without any interference from compiler optimizations.
+
+To increase the accuracy of the attack, you can perform multiple measurements for each input y and take the median time to reduce the impact of outliers and noise in the timing data.
+Between each measurement, you must introduce a very small delay (e.g., time.sleep) to allow the system to stabilize and reduce the impact of transient system load on the timing measurements.
+
+Note that you must disable the garbage collector during the timing measurements to reduce noise, and remove the outliers from the timing data to improve the accuracy of the variance analysis.
+
+I want also that you use parallel processing to speed up the collection of timing measurements, especially for larger key sizes where more samples may be needed for a successful attack.
+To do that, use joblib.
+
+The code must update the collection of data from server and the attack progress in real-time.
+You can use a simple progress bar (e.g., tqdm) to show the progress of the attack and the collection of timing measurements.
+You must base your implementation on the given implementation of RSA.
 
 The code must create a simple local server to simulate the RSA decryption service, and a client script to perform the attack and measure the timings.
 

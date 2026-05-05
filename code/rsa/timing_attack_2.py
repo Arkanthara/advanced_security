@@ -428,7 +428,7 @@ def attack_v2(server: Server, m: int, n_bits: int, beam_width: int = 8) -> int:
 if __name__ == "__main__":
     random.seed(42)
 
-    KEY_SIZE = 128    # total modulus bits (toy size; real RSA ≥ 2048)
+    KEY_SIZE = 2048    # total modulus bits (toy size; real RSA ≥ 2048)
     N_BITS   = 32    # how many bits of d to recover
     TARGET_P = 0.999  # desired per-bit success probability
 

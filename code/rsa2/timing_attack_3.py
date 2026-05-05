@@ -472,15 +472,15 @@ def evaluate_recovery(recovered: list, true_x: int, label: str) -> None:
 if __name__ == "__main__":
     # ── Small RSA key for a feasible local demo ──────────────────────────────
     rsa_instance = RSA()
-    rsa_instance.createKeyPair(size=32)         # 32-bit key → fast demo
+    rsa_instance.createKeyPair(size=128)         # 32-bit key → fast demo
     [e, n], [d, _] = rsa_instance.getKeys()
 
     NUM_BITS         = d.bit_length()  # exponent size to recover
-    NUM_SAMPLES      = 200             # number of distinct query inputs
-    AMPLIFICATION    = 1000            # calls per timed block  ← key fix
-    NUM_RUNS         = 3               # timed blocks per sample
-    FILTER_PERCENTILE= 20              # discard bottom 20% by |delta|  ← key fix
-    BEAM_WIDTH       = 8               # V2 beam width
+    NUM_SAMPLES      = 2000            # number of distinct query inputs
+    AMPLIFICATION    = 2000            # calls per timed block  ← key fix
+    NUM_RUNS         = 1               # timed blocks per sample
+    FILTER_PERCENTILE= 30              # discard bottom 30% by |delta|  ← key fix
+    BEAM_WIDTH       = 10               # V2 beam width
     N_JOBS           = -1              # use all CPUs
 
     print("=" * 60)
