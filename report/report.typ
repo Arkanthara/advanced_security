@@ -66,13 +66,11 @@ For convenience, we will use the following notations throughout the report:
 
 ```python
 %| echo: false
+import timeit
 import random
-import time
 import numpy as np
-from tqdm import tqdm, trange
-from alive_progress import alive_bar, alive_it
+from tqdm import tqdm
 import matplotlib.pyplot as plt
-import gc
 ```
 ```python
 %| echo: false
@@ -245,180 +243,211 @@ def collect_samples(
     num_repetitions: int = 10000,
     private_key: int = None,
     progress_bar: bool = True,
-    disable_gc: bool = True,
     warmup_reps: int = 200,
 ) -> np.ndarray:
     """Collect timing samples for RSA decryption.
 
+    Each sample is a (ciphertext, min_time_ns) pair. The minimum over
+    num_repetitions is used because OS jitter can only ADD latency —
+    the minimum is therefore the best estimate of the true computation
+    time, as established in the timing attack literature (Kocher 1996,
+    Brumley & Boneh 2003).
+
     Parameters
     ----------
     RSA_instance : RSA
         An instance of the RSA class.
     num_samples : int
-        The number of timing samples to collect.
+        The number of (ciphertext, time) pairs to collect.
     num_repetitions : int
-        The number of times to repeat each decryption operation.
+        The number of repetitions per sample. More = better chance of
+        one clean, uninterrupted measurement.
     private_key : int, optional
-        The private key to use for decryption. If not provided, the instance's private key will be used.
+        The private key to use. Defaults to RSA_instance.private_key.
     progress_bar : bool, default=True
-        Whether to display a progress bar.
-    disable_gc : bool, default=True
-        Whether to disable garbage collection during timing measurements.
+        Whether to display a tqdm progress bar.
     warmup_reps : int, default=200
-        The number of warm-up repetitions.
+        Warm-up decryptions to stabilize CPU caches and branch predictor.
 
     Returns
     -------
     np.ndarray
-        An array of timing samples.
+        Array of shape (num_samples, 2): columns are [ciphertext, min_time_ns].
     """
-
     key = private_key if private_key is not None else RSA_instance.private_key
-
-    # Deactivate GC and collect garbage to minimize its impact on timing measurements
-    if disable_gc:
-        gc.disable()
-        gc.collect()
-
-    # Locate hot references
+    n = RSA_instance.n
     decrypt_fn = RSA_instance.decrypt
-    perf_ns    = time.perf_counter_ns
-    n          = RSA_instance.n
 
-    # Warm-up (stabilize branch predictor + CPU caches)
-    for _ in range(warmup_reps):
-        decrypt_fn(random.randint(1, n - 1), private_key=key)
+    # --- Warm-up ---
+    # Stabilise CPU caches and branch predictor before any measurement.
+    # timeit handles GC disabling automatically.
+    warmup_timer = timeit.Timer(
+        stmt=lambda: decrypt_fn(random.randint(1, n - 1), private_key=key)
+    )
+    warmup_timer.timeit(number=warmup_reps)
 
-    # Buffer pre-allocated (zero allocation in inner loop)
-    timing_buf = np.empty(num_repetitions, dtype=np.int64)
-    samples    = np.empty((num_samples, 2), dtype=np.float64)
+    # --- Collection ---
+    samples = np.empty((num_samples, 2), dtype=np.float64)
 
     for i in tqdm(range(num_samples), disable=not progress_bar, leave=False):
         cipher = random.randint(1, n - 1)
 
-        for j in range(num_repetitions):
-            t0 = perf_ns()
-            decrypt_fn(cipher, private_key=key)
-            timing_buf[j] = perf_ns() - t0
+        timer = timeit.Timer(
+            stmt=lambda: decrypt_fn(cipher, private_key=key)
+        )
 
-        samples[i] = [cipher, remove_outliers(timing_buf).mean()]
+        # repeat=num_repetitions, number=1 → one wall-clock measurement
+        # per decryption call, in seconds. timeit disables GC automatically.
+        raw_times_ns = np.array(
+            timer.repeat(repeat=num_repetitions, number=1)
+        ) * 1e9
 
-    if disable_gc:
-        gc.enable()
+        # The minimum is the best estimator of true decryption time.
+        # OS interrupts can only ADD latency, never subtract it.
+        samples[i] = [cipher, raw_times_ns.min()]
+
     return samples
 
-def timing_attack(RSA_instance: RSA, num_samples: int = 1000, num_repetitions: int = 1, num_iterations: int = 10, num_known_bits: int = 5, buffer_size: int = 5, disable_gc: bool = True, warmup_reps: int = 10, progress_bar: bool = False) -> int:
+def timing_attack(
+    RSA_instance: RSA,
+    num_samples: int = 1000,
+    num_repetitions: int = 10000,
+    num_iterations: int = 10,
+    num_known_bits: int = 5,
+    buffer_size: int = 5,
+    warmup_reps: int = 200,
+    progress_bar: bool = False,
+) -> tuple[np.ndarray, list[float]]:
     """
-    Perform a timing attack on the RSA instance to recover the private key.
+    Perform a timing attack on RSA to recover the private key.
+
+    Uses a beam search over key hypotheses: at each iteration, two
+    candidate bits (0 and 1) are tested for each key in the buffer.
+    The hypothesis that minimises variance of (server_time - local_time)
+    is kept, exploiting the extra multiplication in square-and-multiply
+    when a key bit is 1.
 
     Parameters
     ----------
     RSA_instance : RSA
         An instance of the RSA class.
     num_samples : int
-        Number of samples to collect for the attack.
+        Number of ciphertext/time pairs to collect per measurement.
     num_repetitions : int
-        Number of times to repeat each measurement.
+        Repetitions per ciphertext inside collect_samples. More reps
+        = better min() estimate. Replaces the old disable_gc flag since
+        timeit now handles GC automatically.
     num_iterations : int
-        Number of iterations to perform.
+        Number of key bits to recover (one per iteration).
     num_known_bits : int
-        Number of known bits of the private key.
+        Number of LSBs of the private key assumed to be known.
     buffer_size : int
-        The size of the buffer for the beam search.
-    disable_gc : bool
-        Whether to disable garbage collection during timing measurements.
+        Beam width: how many candidate keys to keep at each iteration.
     warmup_reps : int
-        Number of warm-up repetitions to perform before collecting samples.
+        Warm-up decryptions before any measurement (default: 200).
     progress_bar : bool
         Whether to display a progress bar during sample collection.
 
     Returns
     -------
-    int
-        The recovered private key.
+    tuple[np.ndarray, list[float]]
+        candidate_keys : best `buffer_size` recovered key candidates.
+        error_rate     : bit error rate (%) for each candidate.
     """
-    server_samples = collect_samples(RSA_instance, num_samples, num_repetitions, disable_gc=disable_gc, warmup_reps=warmup_reps, progress_bar=progress_bar)
+    # --- Collect server reference samples (true private key) ---
+    server_samples = collect_samples(
+        RSA_instance,
+        num_samples=num_samples,
+        num_repetitions=num_repetitions,
+        warmup_reps=warmup_reps,
+        progress_bar=progress_bar,
+    )
+
+    # --- Beam search initialisation ---
     initial_key = RSA_instance.private_key & ((1 << num_known_bits) - 1)
-
-    # buffer of candidate keys
-    candidate_keys = np.full(buffer_size, initial_key)
-
-    # variance associated with each key
+    candidate_keys      = np.full(buffer_size, initial_key)
     candidate_variances = np.full(buffer_size, np.inf)
 
-    # historical data
-    history_keys = np.zeros((num_iterations, buffer_size))
+    history_keys      = np.zeros((num_iterations, buffer_size))
     history_variances = np.zeros((num_iterations, buffer_size))
 
-    error_rate = 0
-
+    # --- Bit-by-bit recovery ---
     for i in range(num_iterations):
-
-        tested_keys = []
+        tested_keys      = []
         tested_variances = []
 
-        # We test 2 hypotheses for each key in the buffer
         for key in candidate_keys:
-
+            # Hypothesis 0: next bit is 0
             key_h0 = key
+            # Hypothesis 1: next bit is 1
             key_h1 = key | (1 << (num_known_bits + i))
 
-            h0_samples = collect_samples(RSA_instance, num_samples, num_repetitions, private_key=key_h0, disable_gc=disable_gc, warmup_reps=warmup_reps, progress_bar=progress_bar)
-            h0_variance = np.var(server_samples[:, 1] - h0_samples[:, 1])
+            for hyp_key in (key_h0, key_h1):
+                hyp_samples = collect_samples(
+                    RSA_instance,
+                    num_samples=num_samples,
+                    num_repetitions=num_repetitions,
+                    private_key=hyp_key,
+                    warmup_reps=warmup_reps,
+                    progress_bar=progress_bar,
+                )
+                # Variance of time difference: drops when key prefix matches
+                # the real key (the extra multiplication aligns in time)
+                variance = np.var(server_samples[:, 1] - hyp_samples[:, 1])
+                tested_keys.append(hyp_key)
+                tested_variances.append(variance)
 
-            tested_keys.append(key_h0)
-            tested_variances.append(h0_variance)
-
-            h1_samples = collect_samples(RSA_instance, num_samples, num_repetitions, private_key=key_h1, disable_gc=disable_gc, warmup_reps=warmup_reps, progress_bar=progress_bar)
-            h1_variance = np.var(server_samples[:, 1] - h1_samples[:, 1])
-
-            tested_keys.append(key_h1)
-            tested_variances.append(h1_variance)
-
-        tested_keys = np.array(tested_keys)
+        tested_keys      = np.array(tested_keys)
         tested_variances = np.array(tested_variances)
 
-        # We keep the best buffer_size hypotheses
-        best_indices = np.argsort(tested_variances)[:buffer_size]
-
-        candidate_keys = tested_keys[best_indices]
+        # Keep the buffer_size best hypotheses (lowest variance)
+        best_indices        = np.argsort(tested_variances)[:buffer_size]
+        candidate_keys      = tested_keys[best_indices]
         candidate_variances = tested_variances[best_indices]
 
-        # Update historical data
-        history_keys[i] = candidate_keys
+        history_keys[i]      = candidate_keys
         history_variances[i] = candidate_variances
 
-        # debug : best key in the buffer and its associated bit
-        best_key = candidate_keys[0]
-        bit_guessed = (best_key >> (num_known_bits + i)) & 1
-        bit_private_key = (RSA_instance.private_key >> (num_known_bits + i)) & 1
+        # --- Per-iteration debug print ---
+        best_key       = candidate_keys[0]
+        bit_guessed    = (best_key >> (num_known_bits + i)) & 1
+        bit_real       = (RSA_instance.private_key >> (num_known_bits + i)) & 1
+        h0_var         = tested_variances[tested_keys == key_h0][0]
+        h1_var         = tested_variances[tested_keys == key_h1][0]
+        correct        = "✓ CORRECT" if bit_guessed == bit_real else "✗ WRONG"
+        print(
+            f"Iteration {i+1:>{len(str(num_iterations))}}/{num_iterations}: "
+            f"bit guessed = {bit_guessed}  "
+            f"(var h0 = {h0_var:.4e}, var h1 = {h1_var:.4e})  {correct}"
+        )
 
-        print(f"Iteration {i + 1}/{num_iterations}: bit guessed {bit_guessed} (h0 variance = {h0_variance}, h1 variance = {h1_variance}) {'✓ CORRECT' if bit_guessed == bit_private_key else '✗ WRONG'}")
+    # --- Final error rate across all candidates ---
+    error_rates = []
+    print(f"\n{'─' * 40}")
+    for rank, (key, variance) in enumerate(zip(candidate_keys, candidate_variances)):
+        guessed_bits = (key >> num_known_bits) % (1 << num_iterations)
+        real_bits    = (RSA_instance.private_key >> num_known_bits) % (1 << num_iterations)
+        n_errors     = (guessed_bits ^ real_bits).bit_count()
+        rate         = n_errors / num_iterations * 100
+        error_rates.append(rate)
+        print(f"Candidate #{rank+1}")
+        print(f"  Key:        {key}")
+        print(f"  Variance:   {variance:.4e}")
+        print(f"  Error rate: {rate:.2f}%  ({n_errors}/{num_iterations} bits wrong)")
+        print(f"{'─' * 40}")
 
-    # Compute error rate for each candidate key in the buffer
-    error_rate = []
-    for key, variance in zip(candidate_keys, candidate_variances):
-        guessed_key = (key >> num_known_bits) % (1 << num_iterations)
-        real_key = (RSA_instance.private_key >> num_known_bits) % (1 << num_iterations)
-        errors = (guessed_key ^ real_key).bit_count()
-        error_rate.append(errors / num_iterations * 100)
-        print("\n" + "-" * 30)
-        print(f"Candidate key:  {key}")
-        print(f"Variance:       {variance}")
-        print(f"Error rate:     {error_rate[-1]:.2f}%")
-        print("-" * 30)
-    return candidate_keys, error_rate
+    return candidate_keys, error_rates
 
 def get_samples_stats(
     RSA_instance: RSA,
     d_A: int,
     num_samples: int = 10000,
-    disable_gc: bool = False,
-    warmup_reps: int = 0,
+    warmup_reps: int = 200,
     progress_bar: bool = True,
 ) -> np.ndarray:
     """
-    Collect decryption times for a fixed ciphertext.
+    Collect individual decryption times for a single fixed ciphertext.
+    Used to inspect the timing distribution (histogram, min, spread).
 
     Parameters
     ----------
@@ -426,39 +455,42 @@ def get_samples_stats(
     d_A : int
         Private key.
     num_samples : int
-    disable_gc : bool
-        Disable GC during measurement (default: False).
+        Number of individual timing measurements to collect.
     warmup_reps : int
-        Warm-up iterations before measurement (0 = no warm-up).
+        Warm-up iterations to stabilise caches (default: 200).
     progress_bar : bool
-        Show progress bar during measurement (default: True).
+        Show progress bar during measurement.
+
     Returns
     -------
-    np.ndarray  shape (num_samples,), times in nanoseconds.
+    np.ndarray shape (num_samples,), times in nanoseconds.
     """
-    if disable_gc:
-        gc.disable()
-        gc.collect()
-
-    # Localize hot references
     decrypt_fn = RSA_instance.decrypt
-    perf_ns    = time.perf_counter_ns
+    n = RSA_instance.n
 
-    # Warm-up
-    for _ in tqdm(range(warmup_reps), desc="Warm-up", disable=not progress_bar, leave=False):
-        decrypt_fn(d_A)
+    # Warm-up: timeit handles GC disabling automatically
+    warmup_timer = timeit.Timer(
+        stmt=lambda: decrypt_fn(random.randint(1, n - 1), private_key=d_A)
+    )
+    warmup_timer.timeit(number=warmup_reps)
 
-    # Pre-allocated buffer
-    samples = np.empty(num_samples, dtype=np.int64)
-    for i in tqdm(range(num_samples), desc="Sampling", disable=not progress_bar, leave=False):
-        t0 = perf_ns()
-        decrypt_fn(d_A)
-        samples[i] = perf_ns() - t0
+    # One measurement per call (number=1), repeated num_samples times
+    # This gives us the full distribution, not a single aggregate
+    timer = timeit.Timer(
+        stmt=lambda: decrypt_fn(random.randint(1, n - 1), private_key=d_A)
+    )
 
-    if disable_gc:
-        gc.enable()
+    raw = list(
+        tqdm(
+            (t * 1e9 for t in timer.repeat(repeat=num_samples, number=1)),
+            total=num_samples,
+            desc="Sampling",
+            disable=not progress_bar,
+            leave=False,
+        )
+    )
 
-    return samples
+    return np.array(raw, dtype=np.float64)
 
 def plot_distributions(samples_stats_h0: np.ndarray, samples_stats_h1: np.ndarray, percentile=25, title: str = "Distribution of decryption times for two hypotheses with branch prediction"):
     plt.figure(figsize=(12, 8))
@@ -730,26 +762,34 @@ Indeed, on the @fig1, we can see that the mean of the timing measurements of the
 %| label: fig1
 %| plt-axes.grid: false
 
-samples_stats_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, disable_gc=False, warmup_reps=0, progress_bar=False) / 1e6
-samples_stats_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, disable_gc=False, warmup_reps=0, progress_bar=False) / 1e6
+samples_stats_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, warmup_reps=0, progress_bar=False)
+samples_stats_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, warmup_reps=0, progress_bar=False)
 
-plt.figure(figsize=(12, 6))
-plt.suptitle("10000 timing measurements of the decryption operation\non a single ciphertext for two different private keys (0 and 1)")
-plt.subplot(1, 2, 1)
-plt.hist(samples_stats_0, bins=1000)
-plt.axvline(np.mean(samples_stats_0), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_0):.4f} ms')
-plt.title("Key 0")
-plt.xlabel("Decryption Time (ms)")
-plt.ylabel("Frequency")
-plt.legend()
+fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+fig.suptitle(
+    "10 000 timing measurements of the decryption operation\n"
+    "on a single ciphertext for two different private keys (0 and 1)"
+)
 
-plt.subplot(1, 2, 2)
-plt.hist(samples_stats_1, bins=1000)
-plt.axvline(np.mean(samples_stats_1), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_1):.4f} ms')
-plt.title("Key 1")
-plt.xlabel("Decryption Time (ms)")
-plt.ylabel("Frequency")
-plt.legend()
+for ax, samples, title in zip(
+    axes,
+    [samples_stats_0, samples_stats_1],
+    ["Key 0", "Key 1"],
+):
+    min_val = samples.min()
+
+    ax.hist(samples, bins=1000)
+    ax.axvline(
+        min_val,
+        color="red",
+        linestyle="dashed",
+        linewidth=1,
+        label=f"Min: {min_val:.4f} ns",   # min = best estimate of true time
+    )
+    ax.set_title(title)
+    ax.set_xlabel("Decryption time (ns)")
+    ax.set_ylabel("Frequency")
+    ax.legend()
 
 plt.tight_layout()
 plt.show()
@@ -831,6 +871,43 @@ samples_stats_warmup_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, d
 
 plot_distributions(samples_stats_warmup_0, samples_stats_warmup_1, percentile=25, title="Timing measurements with garbage collection disabled and warm-up phase")
 ```
+
+As the repetitions of timing measurements increase the execution time of the attack, it is important to find the right balance between the number of repetitions of timing measurements and the distinction between the two keys in order to optimize the performance of the attack.
+
+To do that, I have tried to plot the mean of the timing measurements with and without extra multiplication (key 1 and key 0) for different number of repetitions of timing measurements, as shown on @fig5.
+
+```python
+%| echo: false
+%| raw: false
+%| grid-inset: 6pt
+%| label: fig5
+
+num_repetitions = [10, 50, 100, 500, 1000, 5000, 10000]
+mean_key_0 = []
+mean_key_1 = []
+for num_reps in num_repetitions:
+    samples_stats_warmup_0 = get_samples_stats(RSA_instance, 0, num_samples=num_reps, disable_gc=True, warmup_reps=200, progress_bar=False) / 1e6
+    samples_stats_warmup_1 = get_samples_stats(RSA_instance, 1, num_samples=num_reps, disable_gc=True, warmup_reps=200, progress_bar=False) / 1e6
+    mean_key_0.append(np.mean(remove_outliers(samples_stats_warmup_0)))
+    mean_key_1.append(np.mean(remove_outliers(samples_stats_warmup_1)))
+
+plt.figure(figsize=(6, 6))
+plt.plot(num_repetitions, mean_key_0, label='Key 0')
+plt.plot(num_repetitions, mean_key_1, label='Key 1')
+plt.xlabel('Number of Repetitions')
+plt.ylabel('Mean Decryption Time (ms)')
+plt.title('Convergence of Timing Measurements')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+=== Performance of the attack
+
+As the attack consists in performing a large number of timing measurements, it can be quite time-consuming, especially if we want to perform a large number of repetitions of each measurement to try to extract the signal from the noise.
+
+That's why I have tried to study the number of repetitions of timing measurements needed to distinguish between case with the extra multiplication (key 1) and case without the extra multiplication (key 0).
 
 
 

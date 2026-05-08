@@ -1,0 +1,3 @@
+[submodule "report/typst_pyexec"]
+	path = report/typst_pyexec
+	url = git@github.com:Arkanthara/typst_pyexec
