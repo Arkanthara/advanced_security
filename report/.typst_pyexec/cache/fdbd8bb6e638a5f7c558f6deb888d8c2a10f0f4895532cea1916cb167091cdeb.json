@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "hash": "fdbd8bb6e638a5f7c558f6deb888d8c2a10f0f4895532cea1916cb167091cdeb",
+  "cell_id": "cell_5",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_1.svg",
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_2.svg"
+  ],
+  "figure_metadata": [
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_1.svg",
+      "figure": 1,
+      "subplot": 1,
+      "is_subplot": true,
+      "title": "Key 0",
+      "suptitle": "Distribution of decryption times for key 0 and key 1, fixed ciphertext and 10000 repetitions",
+      "row": 0,
+      "col": 0,
+      "rows": 1,
+      "cols": 2
+    },
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_2.svg",
+      "figure": 1,
+      "subplot": 2,
+      "is_subplot": true,
+      "title": "Key 1",
+      "suptitle": "Distribution of decryption times for key 0 and key 1, fixed ciphertext and 10000 repetitions",
+      "row": 0,
+      "col": 1,
+      "rows": 1,
+      "cols": 2
+    }
+  ],
+  "error": null,
+  "status": "ok"
+}

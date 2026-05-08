@@ -1,6 +1,26 @@
+
+#show figure.where(kind: "subfigure"): set figure(supplement: "Figure")
+
+#show figure.where(kind: image): outer => {
+  counter(figure.where(kind: "subfigure")).update(0)
+  set figure(numbering: (..nums) => {
+    let outer-nums = counter(figure.where(kind: image)).at(outer.location())
+    std.numbering("1a", ..outer-nums, ..nums)
+  })
+  show figure.where(kind: "subfigure"): inner => {
+    show figure.caption: it => context {
+      std.numbering("(a)", it.counter.at(inner.location()).last())
+      [ ]
+      it.body
+    }
+    inner
+  }
+  outer
+}
 // Main report file
 #import "template.typ": make-report, report-footnote
 #import "metadata.typ": my-report
+#import "@preview/cetz:0.3.1": canvas, draw, tree
 
 // Main content
 #show: make-report.with(my-report)
@@ -12,232 +32,362 @@
   radius: 2pt,
 )
 
+= Introduction
 
-// ─── Part 1: Optimal Portfolio ─────────────────────────────────────────────
-= Option pricing: Black-Scholes versus Binomial Tree
+The cryptography goal is to ensure the confidentiality, integrity, and authenticity of information, and it has become increasingly important in the digital age with the rise of the internet and digital communication where sensitive information is frequently transmitted.
+To achieve these goals, various cryptographic algorithms and protocols have been developed, including symmetric and asymmetric encryption, hashing, and digital signatures.
+These algorithms are based on mathematical problems that are computationally difficult to solve, such as factoring large integers or computing discrete logarithms, which provide the basis for their security since they are believed to be infeasible to break with current computational resources.
 
-Let an asset $S$ be valuated at $t = 0$ at $S_0 = 100$. We consider a European option to buy this asset (call) with maturity $T = 1$ (in years) and strike price $K = 120$. The goal of this exercise is to compare two methods to price this option, Black-Scholes and Binomial Tree. We assume a constant volatility $sigma = 20%$ over the lifespan of the call, and a risk-free rate $r = 5%$.
+However, although these algorithms are designed to be secure against direct attacks, the implementation of these algorithms can introduce vulnerabilities that can be exploited by attackers.
+The vulnerabilities reside in the way the algorithms are implemented and executed, rather than in the algorithms themselves.
+Indeed, attackers can exploit side channels, which are unintended information leaks that occur during the execution of cryptographic algorithms such as timing information, power consumption, electromagnetic emissions, or even sound.
+By analyzing these side channels, attackers can gain insights into the internal workings of the cryptographic algorithm and potentially recover sensitive information such as secret keys.
 
-+ Implement the Black-Scholes formula to determine the value of this call at $t = 0$.
+In this report, we will focus on timing attacks, which are a type of side-channel attack that exploits the time it takes for a cryptographic algorithm to execute.
+Timing attacks can be used to recover secret keys or other sensitive information by measuring the time it takes for a cryptographic operation to complete and analyzing the variations in timing based on different inputs or conditions.
 
-  ```python
-  import numpy as np
-  from scipy.stats import norm
-  
-  
-  def black_scholes_call(S0: float, K: float, T: float, r: float, sigma: float) -> float:
-      """
-      Price a European call option using the Black-Scholes formula.
-  
-      Parameters:
-      S0: float
-        Initial stock price
-      K: float
-        Strike price
-      T: float
-        Time to maturity (in years)
-      r: float
-        Risk-free interest rate
-      sigma: float
-        Volatility of the underlying asset
-  
-      Returns:
-      float: Estimated call option price
-      """
-      d1 = (np.log(S0 / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
-      d2 = d1 - sigma * np.sqrt(T)
-      call_price = S0 * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
-      return call_price
-  
-  
-  S0 = 100
-  K = 120
-  T = 1
-  r = 0.05
-  sigma = 0.20
-  call_price_bs = black_scholes_call(S0, K, T, r, sigma)
-  print(f"Black-Scholes Call Price: {call_price_bs:.2f}")
-  ```
-  
-  #raw("Black-Scholes Call Price: 3.25")
-  
+= Timing attacks on RSA
 
-+ Implement a binomial tree to determine the initial value of the call. Your implementation should take the depth of the tree as an argument.
+RSA is a widely used asymmetric encryption algorithm that relies on the difficulty of factoring large integers to provide security.
+It allows in particular for sharing a symmetric key securely over an insecure channel, enabling secure communication between parties without the need for a pre-shared secret key.
 
-  ```python
-  def binomial_call(
-      S0: float, K: float, T: float, r: float, sigma: float, N: int
-  ) -> float:
-      """
-      Price a European call option using a binomial tree.
-  
-      Parameters:
-      S0: float
-        Initial stock price
-      K: float
-        Strike price
-      T: float
-        Time to maturity (in years)
-      r: float
-        Risk-free interest rate
-      sigma: float
-        Volatility of the underlying asset
-      N: int
-        Number of steps in the binomial tree
-  
-      Returns:
-      float: Estimated call option price
-      """
-      dt = T / N
-      u = np.exp(sigma * np.sqrt(dt))
-      d = np.exp(-sigma * np.sqrt(dt))
-      p = (np.exp(r * dt) - d) / (u - d)
-  
-      # Initialize asset prices at maturity
-      asset_prices = np.zeros(N + 1)
-      for i in range(N + 1):
-          asset_prices[i] = S0 * (u**i) * (d ** (N - i))
-  
-      # Initialize option values at maturity
-      # If negative, the option is not exercised, hence max(0, S-K)
-      option_values = np.maximum(0, asset_prices - K)
-  
-      # Step back through the tree
-      for j in range(N - 1, -1, -1):
-          option_values[: j + 1] = np.exp(-r * dt) * (
-              p * option_values[1 : j + 2] + (1 - p) * option_values[: j + 1]
-          )
-  
-      return option_values[0]
-  
-  
-  N = 100  # Tree depth
-  call_price_tree = binomial_call(S0, K, T, r, sigma, N)
-  print(f"Binomial Tree Call Price (N={N}): {call_price_tree:.2f}")
-  ```
-  
-  #raw("Binomial Tree Call Price (N=100): 3.26")
-  
-  The result obtained from the binomial tree is close to the Black-Scholes price: 3.26 is very close to 3.25, which is the price obtained from the Black-Scholes formula.
+The base principle of RSA resides in the use of a pair of keys: a public key for encryption and a private key for decryption.
+The RSA algorithm consists of three main steps: key generation, encryption, and decryption.
 
-+ On the same graph, plot the evolution of the estimated value of the call option as a function of the binomial tree depth, as well as the value derived with Black-Scholes. What do you observe? How deep should be the tree in order to get a reasonable approximation of the Black-Scholes value?
+== RSA basics
 
-  ```python
-  import matplotlib.pyplot as plt
-  
-  depths = [10, 50, 100, 200, 500]
-  prices = [binomial_call(S0, K, T, r, sigma, N) for N in depths]
-  
-  plt.figure(figsize=(10, 6))
-  plt.plot(depths, prices, marker="o", label="Binomial Tree Price")
-  plt.axhline(y=call_price_bs, color="r", linestyle="--", label="Black-Scholes Price")
-  plt.xscale("log")
-  plt.xlabel("Binomial Tree Depth (N)")
-  plt.ylabel("Call Option Price")
-  plt.title("Call Option Price vs. Binomial Tree Depth")
-  plt.legend()
-  plt.grid()
-  plt.show()
-  ```
-  
-  #figure(image(".typst_pyexec/figures/cell_3_1.svg"), caption: [Call Option Price vs. Binomial Tree Depth])
-  
+The key generation process involves selecting two large prime numbers, $p$ and $q$, and computing their product $n = p times q$, which serves as the modulus for both the public and private keys.
+The choice of $p$ and $q$ is crucial for the security of RSA, as the difficulty of factoring $n$ into its prime factors is what provides the security of the algorithm.
+Indeed, if an attacker can factor $n$ into $p$ and $q$, they can compute the private key and break the encryption.
 
-  We can observe that with a few depths (e.g., N=10), the binomial tree price is quite far from the Black-Scholes price.
-  As we increase the depth, the binomial tree price converges towards the Black-Scholes price.
+The algorithm of key generation can be summarized as follows:
 
-  To get a reasonable approximation, we might need a depth of around N=100 or more since we are more close to the Black-Scholes price at that point.
+1. Choose two distinct large prime numbers $p$ and $q$.
+2. Compute $n = p times q$ and $phi(n) = (p-1)(q-1)$.
+3. Choose an integer $e$ such that
+    - $1 < e < phi(n)$
+    - $gcd(e, phi(n)) = 1$
+4. Compute $d$ such that $e dot d equiv 1 mod phi(n)$.
 
-  So the approximation accuracy can be controlled by the depth of the tree, allowing us to balance between computational cost and precision.
+The public key consists of the pair $(n, e)$, while the private key consists of the pair $(n, d)$.
 
-= Implied Volatility from Binomial Prices
+The encryption process consists of taking a plaintext message $m$ and computing the ciphertext $c = m^e mod n$ using the public key, and the decryption process consists of taking the ciphertext $c$ and computing the plaintext message $m = c^d mod n$ using the private key.
 
-Using your binomial-tree pricer, compute the implied Black–Scholes volatility for different strikes and tree depths. Plot the resulting volatility "smile" and discuss convergence as the tree deepens.
+// By construction, we have $c^d mod n = m^(e d) mod n$. As $e dot d equiv 1 mod phi(n)$, we can write $e dot d = 1 + k times phi(n)$ for some integer $k$, and thus $c^d mod n = m^(1 + k times phi(n)) mod n = m times (m^phi(n))^k mod n$.
+// By Euler's theorem, we have $m^phi(n) equiv 1 mod n$ for any integer $m$ that is coprime to $n$, and thus $c^d mod n = m times 1^k mod n = m mod n$, which means that the decryption process correctly recovers the original plaintext message.
 
-== Strikes & Tree Depths
+For convenience, we will use the following notations throughout the report:
+- $n$: the modulus, which is the product of two large prime numbers $p$ and $q$.
+- $e$: the public exponent, which is an integer that is coprime to $phi(n)$.
+- $d$: the private exponent, which is an integer such that $e dot d equiv 1 mod phi(n)$.
+- $m$: the plaintext message, which is an integer that is less than $n$.
+- $c$: the ciphertext, which is an integer that is less than $n$.
 
-- Fix $S_0 = 100$, $T = 1$, $r = 0.05$.
-- Consider strikes $K in {80, 90, 100, 110, 120}$.
-- Use three binomial-tree depths: $N in {20, 100, 500}$.
 
-  ```python
-  S0 = 100
-  T = 1
-  r = 0.05
-  strikes = [80, 90, 100, 110, 120]
-  tree_depths = [20, 100, 500]
-  ```
-  
 
-== Compute Tree Prices
 
-For each $(K, N)$, compute the call price
 
-$ C_"tree" = "binomial_call"(S_0, K, T, r, sigma_"true", N), quad sigma_"true" = 0.20. $
 
-  ```python
-  sigma_true = 0.20
-  tree_prices = {
-      (K, N): binomial_call(S0, K, T, r, sigma_true, N)
-      for K in strikes
-      for N in tree_depths
-  }
-  ```
-  
+== Timing attacks on RSA
 
-== Implied Volatility via Bisection Method
+Before the exchange of symmetric keys, the client and the server need to perform an RSA encryption and decryption operation to establish a secure communication channel.
+The timing of these operations can be exploited by attackers to infer information about the private key.
 
-- Implement the Black–Scholes call price
+As mentioned earlier, the security of RSA relies on the difficulty of factoring large integers, but the implementation of RSA can introduce vulnerabilities that can be exploited by attackers.
+The goal of the attacker is to recover the unknown private key $d$ thanks to the knowledge of the public key $(n, e)$ and the ability to perform encryption and decryption operations on the server using the RSA algorithm.
 
-$ C_"BS"(S_0, K, T, r, sigma) = S_0 N(d_1) - K e^(-r T) N(d_2), $
+== Square-and-multiply algorithm
 
-with
+Timing attacks on RSA exploit the fact that the time it takes to perform certain operations in the RSA algorithm can vary based on the input values and the internal state of the algorithm.
+For example, the time it takes to perform the modular exponentiation operation $c^d mod n$ can vary based on the value of $d$ and the input ciphertext $c$.
+Indeed, a simple implementation of the modular exponentiation operation can use a square-and-multiply algorithm, as described in the following python code:
 
-$ d_(1,2) = frac(ln(S_0 \/ K) + (r plus.minus frac(1,2) sigma^2) T, sigma sqrt(T)). $
+```python
+def square_and_multiply(y, x, n):
+    s = 1
+    y %= n
 
-- For each tree price $C_"tree"$, solve for $sigma_"imp"$ satisfying
+    while x > 0:
+        if (x % 2) == 1:
+            s = (s * y) % n  # Extra multiplication here when x is odd !
+        y = (y * y) % n
+        x = x >> 1
 
-$ C_"BS"(S_0, K, T, r, sigma_"imp") = C_"tree" $
+    return s
+```
 
-by using a bisection#report-footnote[Instead of coding the bisection loop yourself, you can use Python's `scipy.optimize.bisect`. Define $f(sigma) = C_"BS"(S_0, K, T, r, sigma) - C_"tree"$. Call `bisect(f, 1e-4, 2.0, xtol=1e-6)` to find $sigma_"imp"$. This will be more concise and handles convergence for you.] over $sigma in [10^(-4), 2.0]$ with tolerance $10^(-6)$.
 
-  ```python
-  from scipy.optimize import bisect
-  
-  implied_vols = {}
-  for (K, N), C_tree in tree_prices.items():
-  
-      def f(sigma_imp):
-          return black_scholes_call(S0, K, T, r, sigma_imp) - C_tree
-  
-      sigma_imp = bisect(f, 1e-4, 2.0, xtol=1e-6)
-      implied_vols[(K, N)] = sigma_imp
-  ```
-  
+This code computes $y^x mod n$ using the square-and-multiply algorithm, which is an efficient method for performing modular exponentiation.
+Indeed, computing $y^x mod n$ for very large values of $x$ is computationally expensive.
 
-== Volatility Smile Plot
+The base idea of this algorithm is that computing $y^x$ can be done by taking the binary representation of $x$, which is basically the decomposition of $x$ into powers of 2, and then iteratively computing $y^x mod n$ by taking at each step the previous result and multiplying it by $y$ if the current bit of $x$ is 1, and then squaring the input $y$.
 
-- On one chart, plot $sigma_"imp"(K)$ vs. $K$ for each tree depth $N$, then add a horizontal line at $sigma_"true" = 0.20$ as well.
+For instance, suppose we want to compute $6^13 mod 17$.
+- The binary representation of $13$ is $1101$, which corresponds to the powers of 2: $2^3 + 2^2 + 2^0$.
+- We start with $s = 1$ and $y = 6$.
+- For the first bit (1), we compute
+  - $s = (s dot y) mod 17 = (1 dot 6) mod 17 = 6$
+  - $y = y^2 mod 17 = 6^2 mod 17 = 2$.
+- For the second bit (0), we compute
+  - $s$ remains unchanged since the bit is 0, so $s = 6$.
+  - $y = y^2 mod 17 = 2^2 mod 17 = 4$. Note that here, $y^2$ corresponds to $y^2^2 = y^(2 dot 2) = y^4$.
+- For the third bit (1), we compute
+  - $s = (s dot y) mod 17 = (6 dot 4) mod 17 = 24 mod 17 = 7$
+  - $y = y^2 mod 17 = 4^2 mod 17 = 16$.
+- For the fourth bit (1), we compute
+  - $s = (s dot y) mod 17 = (7 dot 16) mod 17 = 112 mod 17 = 15$
+  - $y = y^2 mod 17 = 16^2 mod 17 = 256 mod 17 = 1$.
 
-  ```python
-  plt.figure(figsize=(10, 6))
-  for N in tree_depths:
-      sigmas = [implied_vols[(K, N)] for K in strikes]
-      plt.plot(strikes, sigmas, marker="o", label=f"Tree Depth N={N}")
-  plt.axhline(y=sigma_true, color="r", linestyle="--", label="True Volatility (20%)")
-  plt.xlabel("Strike Price (K)")
-  plt.ylabel("Implied Volatility")
-  plt.title("Implied Volatility Smile from Binomial Tree Prices")
-  plt.legend()
-  plt.grid()
-  plt.show()
-  ```
-  
-  #figure(image(".typst_pyexec/figures/cell_7_1.svg"), caption: [Implied Volatility Smile from Binomial Tree Prices])
-  
+So the result of $6^13 mod 17$ is $15$.
+The efficiency of the algorithm comes from the fact that it iteratively computes $y^x mod n$ by performing small multiplication and squaring operations thanks to the modular properties instead of performing a single large exponentiation operation.
 
-- Comment on how the smile flattens as $N$ increases.
+But the timing of this algorithm can vary based on the value of the exponent $x$ and the input $y$.
+Indeed, as seen in the above example, the algorithm performs an extra multiplication only when the bit of $x$ is 1, which can lead to a longer execution time compared to when the bit is 0.
+This variation in timing is the basis for timing attacks on RSA.
 
-  When the depth of the tree increases, the implied volatility smiles tend to be more flat and closer to the true volatility computed by the Black-Scholes model.
+== Exploiting timing variations
 
-  Indeed, the Black-Scholes model is a continuous-time model, while the binomial tree is a discrete approximation. As we increase the number of steps in the tree, we get a better approximation of the continuous process, which leads to implied volatilities that are more consistent across different strikes and closer to the true volatility, as we can see on the plot where for instance at N=500, the implied volatilities very close to the Black-Scholes volatility across all strikes.
+Attackers can exploit the timing variations in the square-and-multiply algorithm to recover the private key $d$ by measuring the time it takes for the server to perform decryption operations.
+Note that the attacker must know the modulus $n$, which is public.
+
+First, the attacker sends multiple random ciphertexts $c$ to the server and measures the time it takes for the server to perform the decryption operation $c^d mod n$.
+
+Then for each bit of the private key $d$, the attacker guesses the value of the bit (0 or 1) and computes the expected timing of the decryption operation based on the guess for all the ciphertexts $c$.
+
+Finally, the attacker subtracts his obtained timing measurements from the timing measurements obtained from the server and analyzes the variance of the obtained results.
+If the variance is low, it means that the guess for the bit is correct, while if the variance is high, it means that the guess for the bit is incorrect.
+
+By repeating this process for all the bits of the private key $d$, the attacker can recover the entire private key.
+
+=== Mathematical analysis
+
+==== Probability of a correct guess
+
+We consider $N$ random ciphertexts $c_1, c_2, ..., c_N$ that the attacker sends to the server for decryption.
+
+Let $T_i$ be the time taken for the server to perform the decryption operation $c^d mod n$ for a given ciphertext $c_i$.
+
+Let $x_b$ be the guess for the $b$ first bits of the private key $d$.
+
+Let $t(c_i, x_b)$ be the time taken to perform the decryption operation according to the guess $x_b$ for the $b$ first bits of $d$.
+
+If the guess $x_b$ is correct, the timing error $T_i - t(c_i, x_b)$ will be small, indicating a good match between the observed and expected timings.
+We define $F$ as the probability to observe the timing error $T_i - t(c_i, x_b)$ if the guess $x_b$ is correct.
+As each timing measurement is independent, the probability of a correct guess for the $b$ first bits of $d$ is proportional to the product of the probabilities of $F$ for all the ciphertexts $c_i$:
+
+$ P(x_b) prop product_(i=1)^N F(T_i - t(c_i, x_b)) $
+
+Suppose that the $b - 1$ bits of $d$ are correct, and we want to guess the value of the $b$-th bit.
+We note $x_b_0$ and $x_b_1$ the guesses for the $b$-th bit being 0 and 1, respectively.
+
+The probability of having $x_b_1$ is:
+
+$ P(x_b_1) = (product_(i=1)^N F(T_i - t(c_i, x_b_1)))/(product_(i=1)^N F(T_i - t(c_i, x_b_0)) + product_(i=1)^N F(T_i - t(c_i, x_b_1))) $
+
+If $P(x_b_1) > 0.5$, it means that the guess $x_b_1$ is more likely to be correct than the guess $x_b_0$, and thus we can conclude that the $b$-th bit of $d$ is likely to be 1.
+
+Concretely, computing the exact distribution of $F$ is not feasible.
+
+==== Variance analysis
+
+Instead of computing the exact distribution of $F$, we can analyze the variance of the timing errors for the two guesses $x_b_0$ and $x_b_1$.
+
+Suppose the private key $d$ has $l$ bits.
+The time taken for the decryption operation can be denoted as $T_i = sum_(k = 1)^l t_k + epsilon$ with $t_k$ the time taken for the $k$-th step of the algorithm and $epsilon$ representing the timing noise caused by various factors such as system load, network latency, or other sources of randomness.
+
+Suppose that $x_(b - 1)$ is known to be correct.
+The attacker can compute the time taken for each step of the first $b - 1$ bits as $sum_(k = 1)^(b - 1) t_k$.
+
+The time difference is then:
+
+$ T_i - t(c_i, x_(b - 1)) = sum_k^l t_k + epsilon - sum_k^(b - 1) t_k = sum_(k = b)^l t_k + epsilon $
+
+If the guess $x_b$ is correct, the time difference will be:
+
+$ T_i - t(c_i, x_b) = sum_(k = b + 1)^l t_k + epsilon $
+
+And if the guess $x_b$ is incorrect, the time difference will be:
+
+$ T_i - t(c_i, x_b) = sum_k^l t_k + epsilon - (sum_k^(b - 1) t_k + t_b_("incorrect")) = sum_(k = b + 1)^l t_k + epsilon + (t_b_("correct") - t_b_("incorrect")) $.
+
+We can constate that the time difference for the correct guess $x_b$ is smaller than the time difference for the incorrect guess $x_b$ by a factor of $t_b_("correct") - t_b_("incorrect")$, meaning that the variance of the time differences for the correct guess $x_b$ will be smaller than the variance of the time differences for the incorrect guess $x_b$.
+
+So by analyzing the variance of the time differences for the two guesses $x_b_0$ and $x_b_1$, the attacker can determine which guess is more likely to be correct, and thus recover the bits of the private key $d$ one by one.
+
+==== Impact of previous errors on the variance
+
+Now, suppose that the $c$-th bit of $d$ is incorrect for some $c < b - 1$.
+The time difference for the correct guess $x_b$ will be:
+
+$ T_i - t(c_i, x_b) = sum_k^l t_k + epsilon - (sum_k^(c - 1) t_k + sum_(k = c)^b t_k) = sum_(k = b + 1)^l t_k + epsilon + (sum_(k = c)^b (t_k_("correct") - t_k_("incorrect"))) $
+
+We have $t_k$ which starts to be different for the correct and incorrect guesses for all the bits from $c$ to $b$ since the intermediate steps of the algorithm will be executed differently due to the error in the guess for the $c$-th bit, leading to a different $t_k$ for all the bits from $c$ to $b$ even if the guess for the $b$-th bit is correct.
+
+So when the guess $x_b$ has some previous errors, the variance of the correct guess will start to be similar to the variance of the incorrect guess.
+
+This property can be exploited to detect errors in the guess for the $b$-th bit.
+Indeed, attacker can keep track of the variance of the time differences and come back to a previous guess if the variance starts to be too similar for both the correct and incorrect guesses, indicating that there might be an error in the previous bits of the guess.
+
+== Code implementation
+
+The code implementation was done first in Python, and then in Rust and C++ to try to reduce the noise in the timing measurements and thus increase the chances of success of the attack.
+
+Indeed, the python implementation was not successful at all in recovering the private key due to the high noise caused by the Python interpreter and its optimizations, which totally masked the timing variations caused by the square-and-multiply algorithm.
+
+=== Sources of noise <noise>
+
+There are several sources of noise that can affect the timing measurements in programming languages, especially in high-level languages like Python.
+
+==== CPU cache effects
+
+CPU cache effects that can cause variability in the timing measurements based on the memory access patterns of the algorithm.
+
+First, there are different levels of CPU cache (L1, L2, L3) that can store recently accessed data and instructions.
+
+These caches are designed to speed up access to frequently used data and instructions, but they can also introduce variability in the timing measurements.
+Indeed, the cache L1 is the fastest but also the smallest, while the cache L3 is the slowest but also the largest, meaning that if the data or instructions needed for the algorithm are in the cache L1, the timing measurements will be faster compared to when they are in the cache L3 or not in the cache at all.
+
+If the data or instructions needed are not in the cache, the CPU triggers a cache miss, which means that it has to fetch the data from the main memory, leading to a significant delay in the execution of the algorithm and thus in the timing measurements.
+
+These cache effects represent a significant source of noise in timing measurements.
+
+==== Branch prediction
+
+Branch prediction is a technique used by modern CPUs to improve performance by guessing the outcome of conditional statements and executing instructions based on those guesses.
+When the CPU encounters a conditional statement (e.g., an if statement), it makes a guess about which branch of the code will be executed next based on past behavior and patterns.
+This allows the CPU to continue executing instructions without waiting for the outcome of the conditional statement, which can improve performance.
+
+So if the CPU correctly predicts the branch, it can continue executing instructions without interruption, but if the CPU incorrectly predicts the branch, it has to discard the incorrectly executed instructions and fetch the correct instructions, leading to a significant delay in the execution of the algorithm and thus in the timing measurements.
+
+That's why branch prediction can cause variability in the timing measurements based on the input values and the internal state of the algorithm, as different inputs can lead to different execution paths and thus different branch predictions.
+
+==== Garbage collection
+
+Garbage collection is a form of automatic memory management that is used in many programming languages, including Python.
+It is responsible for automatically freeing up memory that is no longer in use by the program, which can help prevent memory leaks and improve performance.
+
+However, the garbage collector can be triggered at any time during the execution of the program.
+When the garbage collector runs, it can cause significant delays in the execution of the program: it has to pause the execution of the program, scan the memory for objects that are no longer in use, and free up the memory occupied by those objects.
+
+This can lead to significant variability in the timing measurements since the garbage collector can be triggered at different times during the execution of the algorithm, leading to different timing measurements for the same operations.
+
+==== Multiplication optimizations
+
+The usage of modern programming languages introduces various optimizations that can affect the timing measurements, such as the optimization of multiplication operations.
+
+The multiplication of large integers can be optimized using different algorithms depending on the size of the numbers.
+For small integers, the standard multiplication algorithm is used whereas for larger integers, more efficient algorithms such as Karatsuba or Toom-Cook can be used.
+
+These optimizations can lead to different timing measurements for the same operations based on the size of the numbers being multiplied.
+
+==== Other optimizations
+
+There are also other optimizations that can be introduced by the programming language or the compiler, such as loop unrolling, instruction reordering, or just-in-time compilation, which can further introduce variability in the timing measurements.
+
+So the sources of noise in timing measurements can be quite significant, especially in high-level programming languages like Python, and they can totally mask the timing variations caused by the square-and-multiply algorithm.
+
+=== Reducing the impact of noise
+
+There are several techniques that can be used to try to reduce the impact of these sources of noise in timing measurements.
+
+==== Averaging timing measurements
+
+The first approach can consist to perform a large number of timing measurements for each sample and then use statistical analysis to try to extract the signal from the noise, such as computing the mean or the median of the timing measurements for each sample.
+
+However, as shown on @fig1, there are some samples for which the timing measurements are significantly higher than the others, which can be caused by the garbage collector or other sources of noise described in @noise, and these outliers can significantly affect the mean and thus the analysis of the timing measurements.
+
+Indeed, on the @fig1, we can see that the mean of the timing measurements of the key 0 is higher than the mean of the timing measurements of the key 1, which is not expected since the key 0 should be faster than the key 1 due to the extra multiplication performed when the bit of the key is 1.
+
+#figure(grid(columns: 2, inset: 6pt, [#figure(image(".typst_pyexec/figures/cell_5_1_1.svg"), kind: "subfigure", caption: [Key 0]) <fig1-a>], [#figure(image(".typst_pyexec/figures/cell_5_1_2.svg"), kind: "subfigure", caption: [Key 1]) <fig1-b>]), caption: [10000 timing measurements of the decryption operation #linebreak() on a single ciphertext for two different private keys (0 and 1)], kind: image) <fig1>
+
+
+A way to mitigate the impact of these outliers is to filter them out by removing the timing measurements that are too far from the center of the distribution.
+This can be done by removing the timing measurements that are bellow or above a certain percentile of the distribution, such as bellow 25% and above 75%, which can help to reduce the impact of outliers on the analysis of the timing measurements by keeping only the most representative samples.
+
+However, as shown on @fig2, even after removing the outliers, the average timing measurements for the key 0 are still higher than the average timing measurements for the key 1, which is not expected since the key 0 should be faster than the key 1 due to the extra multiplication performed when the bit of the key is 1.
+
+This can be explained by the fact that the sources of noise described in @noise are still present in the timing measurements, making the averaging of the timing measurements not sufficient to extract the signal from the noise.
+
+#figure(grid(columns: 2, inset: 6pt, [#figure(image(".typst_pyexec/figures/cell_6_1_1.svg"), kind: "subfigure", caption: [Key 0]) <fig2-a>], [#figure(image(".typst_pyexec/figures/cell_6_1_2.svg"), kind: "subfigure", caption: [Key 1]) <fig2-b>]), caption: [Removing outliers from the timing measurements #linebreak() by keeping only the samples between 25% and 75%], kind: image) <fig2>
+
+
+==== Warm-up and disabling garbage collection
+
+As making a large number of timing measurements is not sufficient to extract the signal from the noise, another approach can consist to try to reduce the sources of noise in the timing measurements.
+
+As mentioned in @noise, the garbage collector is a significant source of noise in the timing measurements, so one way to reduce the noise is to disable the garbage collector during the timing measurements.
+
+This can be done using the `gc` module in Python, which provides functions to enable and disable the garbage collector.
+
+The obtained results shown on @fig3 are much better than the previous results shown on @fig1 and @fig2, as we can see that the average timing measurements for the key 0 are now lower than the average timing measurements for the key 1 as expected.
+
+#figure(grid(columns: 2, inset: 6pt, [#figure(image(".typst_pyexec/figures/cell_7_1_1.svg"), kind: "subfigure", caption: [Hypothesis h0: the last bit is 0]) <fig3-a>], [#figure(image(".typst_pyexec/figures/cell_7_1_2.svg"), kind: "subfigure", caption: [Hypothesis h1: the last bit is 1]) <fig3-b>], [#figure(image(".typst_pyexec/figures/cell_7_1_3.svg"), kind: "subfigure", caption: [Hypothesis h0: the last bit is 0 (without outliers)]) <fig3-c>], [#figure(image(".typst_pyexec/figures/cell_7_1_4.svg"), kind: "subfigure", caption: [Hypothesis h1: the last bit is 1 (without outliers)]) <fig3-d>]), caption: [Timing measurements with garbage collection disabled], kind: image) <fig3>
+
+
+Now, the problem is that the two measurements for the key 0 and the key 1 are still quite close to each other.
+To try to further reduce the noise in the timing measurements and improve the distinction between the two keys, we can add a warm-up phase before the timing measurements.
+
+The warm-up phase consists in performing a certain number of decryption operations before the timing measurements.
+In this way, the CPU can load the necessary data and instructions into the cache, and the branch predictor can learn the patterns of the algorithm, which can help to reduce the variance of the timing measurements.
+The warm-up phase is a common technique used in performance benchmarking to ensure that the measurements are more stable and representative of the actual performance of the algorithm.
+
+The obtained results shown on @fig4 have a much better distinction between the two keys compared to the previous results shown on @fig3.
+
+#figure(grid(columns: 2, inset: 6pt, [#figure(image(".typst_pyexec/figures/cell_8_1_1.svg"), kind: "subfigure", caption: [Hypothesis h0: the last bit is 0]) <fig4-a>], [#figure(image(".typst_pyexec/figures/cell_8_1_2.svg"), kind: "subfigure", caption: [Hypothesis h1: the last bit is 1]) <fig4-b>], [#figure(image(".typst_pyexec/figures/cell_8_1_3.svg"), kind: "subfigure", caption: [Hypothesis h0: the last bit is 0 (without outliers)]) <fig4-c>], [#figure(image(".typst_pyexec/figures/cell_8_1_4.svg"), kind: "subfigure", caption: [Hypothesis h1: the last bit is 1 (without outliers)]) <fig4-d>]), caption: [Timing measurements with garbage collection disabled and warm-up phase], kind: image) <fig4>
+
+
+
+
+
+Personally, I have tried to implement the attack in Rust and C++ to try to reduce the noise caused by the Python interpreter and its optimizations, but the attack was still not successful at all in recovering the private key due to the high noise caused by the CPU cache effects, branch prediction, and other optimizations.
+
+I have tried to implement a simple version of the timing attack on RSA in Python, based on the square-and-multiply algorithm for modular exponentiation.
+
+The code contains two versions of the attack:
+- A simple version that does not take into account the impact of previous errors on the variance, which can lead to a higher number of errors in the recovered private key.
+- An improved version that manage a fixed size list of the best guesses for the private key, and that compute each time the new guess on all the list of best guesses, allowing to avoid the impact of previous errors on the variance and thus reduce the number of errors in the recovered private key.
+  Note that if the list of best guesses contains only guesses with some errors, the attack can still fail, but in practice, it allows to significantly reduce the number of errors in the recovered private key.
+
+However, the attack was not successful at all in recovering the private key, even with the improved version.
+Indeed, Python introduces a lot of noise in the timing measurements, such as:
+- The garbage collector, which can be triggered at any time and can cause significant delays in the execution of the code.
+- The optimization which can change the algorithm used for multiplication depending on the size of the numbers, leading to different timing measurements for the same operations.
+- The branch prediction that can cause variability in the timing measurements based on the input values and the internal state of the algorithm.
+- CPU cache effects that can cause variability in the timing measurements based on the memory access patterns of the algorithm.
+- Other CPU and Python optimizations that can introduce variability in the timing measurements.
+These sources of noise have totally masked the timing variations caused by the square-and-multiply algorithm, making it impossible to recover the private key using the timing attack, even with a large number of repetitions of timing measurements (up to 100k messages and 10000 repetitions in Rust), the disabling of the garbage collector and the addition of a delay before each timing measurement to try to reduce the impact of the optimizations and branch prediction.
+
+== Fermat's factorization method
+
+The private key $d$ in RSA is computed based on the prime factors $p$ and $q$ of the modulus $n$.
+So another way to recover the private key $d$ is to factor the modulus $n$ into its prime factors $p$ and $q$, and then compute $d$ using the formula $d equiv e^(-1) mod phi(n)$ with $phi(n) = (p - 1)(q - 1)$ the Euler's totient function.
+The inverse of $e$ modulo $phi(n)$ can be computed using the Extended Euclidean Algorithm, which is an efficient method for computing the greatest common divisor of two integers and their multiplicative inverse.
+
+But factoring large integers is a computationally hard problem, and the security of RSA relies on this fact.
+
+However, if $p$ and $q$ are close to each other, meaning that the difference between $p$ and $q$ is small, then it becomes easier to factor $n$ using Fermat's factorization method.
+
+Fermat's factorization method relies on the fact that $n$ is a product of two odd primes $p$ and $q$.
+As $p$ and $q$ are odd, there always exist an integer number which is at the middle of $p$ and $q$, which is $x = (p + q)/2$.
+Then, we consider $y$ as the distance between $x$ and $p$ (or $q$):
+$ y = x - p = q - x $
+
+So we have:
+- $p = x - y$
+- $q = x + y$
+
+If we express $n$ in terms of $x$ and $y$, we get:
+$ n = p times q = (x - y)(x + y) = x^2 - y^2 $
+
+From this equation, we can deduce that $y^2 = x^2 - n$.
+
+The Fermat's factorization method consists in finding the smallest integer $x$ such that $y^2 = x^2 - n$ is a perfect square, meaning that $y$ is an integer.
+
+Once we find such an integer $x$, we can compute $y$ as $y = sqrt(x^2 - n)$, and then we can obtain the prime factors $p$ and $q$ as described above.
+
+So the algorithm can be summarized as follows:
+
+1. Compute $x = ceil(sqrt(n))$.
+2. Compute $y^2 = x^2 - n$.
+3. If $y^2$ is a perfect square, then $y = sqrt(y^2)$ and we can compute $p = x - y$ and $q = x + y$.
+4. Otherwise, increment $x$ and repeat from step 2.

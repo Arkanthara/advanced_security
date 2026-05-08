@@ -1,6 +1,7 @@
 // Main report file
 #import "template.typ": make-report, report-footnote
 #import "metadata.typ": my-report
+#import "@preview/cetz:0.3.1": canvas, draw, tree
 
 // Main content
 #show: make-report.with(my-report)
@@ -63,6 +64,455 @@ For convenience, we will use the following notations throughout the report:
 - $m$: the plaintext message, which is an integer that is less than $n$.
 - $c$: the ciphertext, which is an integer that is less than $n$.
 
+```python
+%| echo: false
+import random
+import time
+import numpy as np
+from tqdm import tqdm, trange
+from alive_progress import alive_bar, alive_it
+import matplotlib.pyplot as plt
+import gc
+```
+```python
+%| echo: false
+class RSA:
+    """
+    RSA implementation for encryption, signature and station-to-station key exchange.
+    """
+
+    def __init__(self, private_key: int = None, public_key: int = None, n: int = None, fast_exp: callable = None) -> None:
+        self.private_key = private_key
+        self.public_key = public_key
+        self.n = n
+        self.challenge = "Bravo ! Je suis épousplouffé par ta maîtrise du timing attack sur RSA !"
+        self.fast_exp = fast_exp if fast_exp is not None else self._default_fast_exp
+    
+    def copy(self):
+        return RSA(self.private_key, self.public_key, self.n, self.fast_exp)
+
+    def _default_fast_exp(self, y: int, x: int, n: int) -> int:
+        """Apply fast exponentiation for y^x modulo n"""
+        s = 1
+        y %= n
+
+        while x > 0:
+            if (x % 2) == 1:
+                s = (s * y) % n
+            y = (y * y) % n
+            x = x >> 1
+
+        return s
+
+    def setKeys(self, private_key: int, public_key: int, n: int) -> None:
+        self.private_key = private_key
+        self.public_key = public_key
+        self.n = n
+
+    def getKeys(self) -> list:
+        return [self.public_key, self.n], [self.private_key, self.n]
+    
+    def exportPublicKey(self) -> list:
+        return [self.public_key, self.n]
+
+    def createKeyPair(self, size: int) -> list:
+        p = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
+        q = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
+        n, e, d = self.key_generator(p, q, size=size)
+        self.setKeys(d, e, n)
+        return [n, e, d]
+
+    def encrypt(self, message: int) -> int:
+        return self.fast_exp(message, self.public_key, self.n)
+
+    def decrypt(self, cipher: int, private_key: int = None) -> int:
+        if private_key is not None:
+            return self.fast_exp(cipher, private_key, self.n)
+        return self.fast_exp(cipher, self.private_key, self.n)
+    
+    def createChallenge(self) -> int:
+        challenge_int = int.from_bytes(self.challenge.encode(), 'big')
+        self.challenge = self.encrypt(challenge_int)
+        return self.challenge
+    
+    def decryptChallenge(self, tested_key: int) -> str:
+        decrypted_challenge_int = self.decrypt(self.challenge, private_key=tested_key)
+        decrypted_challenge_bytes = decrypted_challenge_int.to_bytes((decrypted_challenge_int.bit_length() + 7) // 8, 'big')
+        return decrypted_challenge_bytes.decode()
+
+    def fermat_test(self, n: int) -> bool:
+        """
+        Check if a number is primary by running Fermat test.
+        """
+        for _ in range(20):
+            alpha = random.randint(2, n - 1)
+            if self.fast_exp(alpha, n - 1, n) != 1:
+                return False
+        return True
+
+    def primary_nb_generator(self, a: int, b: int, safe_prime: bool = False) -> int:
+        """
+        Generate primary number in range a, b
+
+        Parameters
+        ----------
+        a : int
+            lower bound
+        b : int
+            upper bound
+        safe_prime : bool
+            Generate primary number p with (p - 1) / 2 also primary
+
+        Returns
+        -------
+        int
+            Primary number generated
+
+        """
+        while True:
+            p = random.randint(a, b)
+            if self.fermat_test(p):
+                if safe_prime:
+                    if self.fermat_test((p - 1) / 2):
+                        return p
+                else:
+                    return p
+
+    def Euclide(self, a: int, b: int) -> list:
+        """
+        Euclide's extended algorithm, used to find decryption exponent d for RSA
+        Return a list [pgcd(a, b), inverse of a mod b, inverse of b mod a]
+
+        """
+        if b > a:
+            a, b = b, a  # swap
+
+        r_0, r_1 = a, b
+        s_0, s_1 = 1, 0
+        t_0, t_1 = 0, 1
+
+        while r_1 != 0:
+            q = r_0 // r_1
+            r_0, r_1 = r_1, r_0 - q * r_1
+            s_0, s_1 = s_1, s_0 - q * s_1
+            t_0, t_1 = t_1, t_0 - q * t_1
+
+        return [r_0, s_0 % b, t_0 % a]
+
+    def key_generator(self, p: int = 0, q: int = 0, e: int = 0, size: int = 512) -> list:
+        """
+        Generate public and private key for RSA
+        """
+        if p == 0:
+            p = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
+        if q == 0:
+            q = self.primary_nb_generator(2**(size//2 - 1), 2**(size//2))
+
+        assert self.fermat_test(p), "p is not primary"
+        assert self.fermat_test(q), "q is not primary"
+        n = p * q
+        phi_n = (p - 1) * (q - 1)
+
+        if e != 0:
+            pgcd, _, d = self.Euclide(phi_n, e)
+            assert pgcd == 1, "pgcd(phi_n, e) is not equal to 1, so no private key found !"
+
+        else:
+            # Find a primary number e with phi_n
+            while True:
+                e = random.randint(2**(size - 1), 2**(size))
+                pgcd, _, d = self.Euclide(phi_n, e)
+
+                # If primary number with phi_n, claim public key
+                if pgcd == 1:
+                    break
+        return n, e, d
+
+def remove_outliers(samples, percentile=0.25):
+    samples = np.asarray(samples)
+    
+    if percentile >= 1:
+        percentile /= 100
+    
+    down = np.percentile(samples, percentile * 100)
+    up = np.percentile(samples, (1 - percentile) * 100)
+    
+    return samples[(samples >= down) & (samples <= up)]
+
+def collect_samples(
+    RSA_instance: RSA,
+    num_samples: int = 1000,
+    num_repetitions: int = 10000,
+    private_key: int = None,
+    progress_bar: bool = True,
+    disable_gc: bool = True,
+    warmup_reps: int = 200,
+) -> np.ndarray:
+    """Collect timing samples for RSA decryption.
+
+    Parameters
+    ----------
+    RSA_instance : RSA
+        An instance of the RSA class.
+    num_samples : int
+        The number of timing samples to collect.
+    num_repetitions : int
+        The number of times to repeat each decryption operation.
+    private_key : int, optional
+        The private key to use for decryption. If not provided, the instance's private key will be used.
+    progress_bar : bool, default=True
+        Whether to display a progress bar.
+    disable_gc : bool, default=True
+        Whether to disable garbage collection during timing measurements.
+    warmup_reps : int, default=200
+        The number of warm-up repetitions.
+
+    Returns
+    -------
+    np.ndarray
+        An array of timing samples.
+    """
+
+    key = private_key if private_key is not None else RSA_instance.private_key
+
+    # Deactivate GC and collect garbage to minimize its impact on timing measurements
+    if disable_gc:
+        gc.disable()
+        gc.collect()
+
+    # Locate hot references
+    decrypt_fn = RSA_instance.decrypt
+    perf_ns    = time.perf_counter_ns
+    n          = RSA_instance.n
+
+    # Warm-up (stabilize branch predictor + CPU caches)
+    for _ in range(warmup_reps):
+        decrypt_fn(random.randint(1, n - 1), private_key=key)
+
+    # Buffer pre-allocated (zero allocation in inner loop)
+    timing_buf = np.empty(num_repetitions, dtype=np.int64)
+    samples    = np.empty((num_samples, 2), dtype=np.float64)
+
+    for i in tqdm(range(num_samples), disable=not progress_bar, leave=False):
+        cipher = random.randint(1, n - 1)
+
+        for j in range(num_repetitions):
+            t0 = perf_ns()
+            decrypt_fn(cipher, private_key=key)
+            timing_buf[j] = perf_ns() - t0
+
+        samples[i] = [cipher, remove_outliers(timing_buf).mean()]
+
+    if disable_gc:
+        gc.enable()
+    return samples
+
+def timing_attack(RSA_instance: RSA, num_samples: int = 1000, num_repetitions: int = 1, num_iterations: int = 10, num_known_bits: int = 5, buffer_size: int = 5, disable_gc: bool = True, warmup_reps: int = 10, progress_bar: bool = False) -> int:
+    """
+    Perform a timing attack on the RSA instance to recover the private key.
+
+    Parameters
+    ----------
+    RSA_instance : RSA
+        An instance of the RSA class.
+    num_samples : int
+        Number of samples to collect for the attack.
+    num_repetitions : int
+        Number of times to repeat each measurement.
+    num_iterations : int
+        Number of iterations to perform.
+    num_known_bits : int
+        Number of known bits of the private key.
+    buffer_size : int
+        The size of the buffer for the beam search.
+    disable_gc : bool
+        Whether to disable garbage collection during timing measurements.
+    warmup_reps : int
+        Number of warm-up repetitions to perform before collecting samples.
+    progress_bar : bool
+        Whether to display a progress bar during sample collection.
+
+    Returns
+    -------
+    int
+        The recovered private key.
+    """
+    server_samples = collect_samples(RSA_instance, num_samples, num_repetitions, disable_gc=disable_gc, warmup_reps=warmup_reps, progress_bar=progress_bar)
+    initial_key = RSA_instance.private_key & ((1 << num_known_bits) - 1)
+
+    # buffer of candidate keys
+    candidate_keys = np.full(buffer_size, initial_key)
+
+    # variance associated with each key
+    candidate_variances = np.full(buffer_size, np.inf)
+
+    # historical data
+    history_keys = np.zeros((num_iterations, buffer_size))
+    history_variances = np.zeros((num_iterations, buffer_size))
+
+    error_rate = 0
+
+    for i in range(num_iterations):
+
+        tested_keys = []
+        tested_variances = []
+
+        # We test 2 hypotheses for each key in the buffer
+        for key in candidate_keys:
+
+            key_h0 = key
+            key_h1 = key | (1 << (num_known_bits + i))
+
+            h0_samples = collect_samples(RSA_instance, num_samples, num_repetitions, private_key=key_h0, disable_gc=disable_gc, warmup_reps=warmup_reps, progress_bar=progress_bar)
+            h0_variance = np.var(server_samples[:, 1] - h0_samples[:, 1])
+
+            tested_keys.append(key_h0)
+            tested_variances.append(h0_variance)
+
+            h1_samples = collect_samples(RSA_instance, num_samples, num_repetitions, private_key=key_h1, disable_gc=disable_gc, warmup_reps=warmup_reps, progress_bar=progress_bar)
+            h1_variance = np.var(server_samples[:, 1] - h1_samples[:, 1])
+
+            tested_keys.append(key_h1)
+            tested_variances.append(h1_variance)
+
+        tested_keys = np.array(tested_keys)
+        tested_variances = np.array(tested_variances)
+
+        # We keep the best buffer_size hypotheses
+        best_indices = np.argsort(tested_variances)[:buffer_size]
+
+        candidate_keys = tested_keys[best_indices]
+        candidate_variances = tested_variances[best_indices]
+
+        # Update historical data
+        history_keys[i] = candidate_keys
+        history_variances[i] = candidate_variances
+
+        # debug : best key in the buffer and its associated bit
+        best_key = candidate_keys[0]
+        bit_guessed = (best_key >> (num_known_bits + i)) & 1
+        bit_private_key = (RSA_instance.private_key >> (num_known_bits + i)) & 1
+
+        print(f"Iteration {i + 1}/{num_iterations}: bit guessed {bit_guessed} (h0 variance = {h0_variance}, h1 variance = {h1_variance}) {'✓ CORRECT' if bit_guessed == bit_private_key else '✗ WRONG'}")
+
+    # Compute error rate for each candidate key in the buffer
+    error_rate = []
+    for key, variance in zip(candidate_keys, candidate_variances):
+        guessed_key = (key >> num_known_bits) % (1 << num_iterations)
+        real_key = (RSA_instance.private_key >> num_known_bits) % (1 << num_iterations)
+        errors = (guessed_key ^ real_key).bit_count()
+        error_rate.append(errors / num_iterations * 100)
+        print("\n" + "-" * 30)
+        print(f"Candidate key:  {key}")
+        print(f"Variance:       {variance}")
+        print(f"Error rate:     {error_rate[-1]:.2f}%")
+        print("-" * 30)
+    return candidate_keys, error_rate
+
+def get_samples_stats(
+    RSA_instance: RSA,
+    d_A: int,
+    num_samples: int = 10000,
+    disable_gc: bool = False,
+    warmup_reps: int = 0,
+    progress_bar: bool = True,
+) -> np.ndarray:
+    """
+    Collect decryption times for a fixed ciphertext.
+
+    Parameters
+    ----------
+    RSA_instance : RSA
+    d_A : int
+        Private key.
+    num_samples : int
+    disable_gc : bool
+        Disable GC during measurement (default: False).
+    warmup_reps : int
+        Warm-up iterations before measurement (0 = no warm-up).
+    progress_bar : bool
+        Show progress bar during measurement (default: True).
+    Returns
+    -------
+    np.ndarray  shape (num_samples,), times in nanoseconds.
+    """
+    if disable_gc:
+        gc.disable()
+        gc.collect()
+
+    # Localize hot references
+    decrypt_fn = RSA_instance.decrypt
+    perf_ns    = time.perf_counter_ns
+
+    # Warm-up
+    for _ in tqdm(range(warmup_reps), desc="Warm-up", disable=not progress_bar, leave=False):
+        decrypt_fn(d_A)
+
+    # Pre-allocated buffer
+    samples = np.empty(num_samples, dtype=np.int64)
+    for i in tqdm(range(num_samples), desc="Sampling", disable=not progress_bar, leave=False):
+        t0 = perf_ns()
+        decrypt_fn(d_A)
+        samples[i] = perf_ns() - t0
+
+    if disable_gc:
+        gc.enable()
+
+    return samples
+
+def plot_distributions(samples_stats_h0: np.ndarray, samples_stats_h1: np.ndarray, percentile=25, title: str = "Distribution of decryption times for two hypotheses with branch prediction"):
+    plt.figure(figsize=(12, 8))
+    plt.suptitle(title)
+    plt.subplot(2, 2, 1)
+    plt.hist(samples_stats_h0, bins=200)
+    plt.axvline(np.mean(samples_stats_h0), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_h0):.4f} ms')
+    plt.title("Hypothesis h0: the last bit is 0")
+    plt.xlabel("Decryption Time")
+    plt.ylabel("Frequency")
+    plt.legend()
+    plt.subplot(2, 2, 2)
+    plt.hist(samples_stats_h1, bins=200)
+    plt.axvline(np.mean(samples_stats_h1), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_h1):.4f} ms')
+    plt.title("Hypothesis h1: the last bit is 1")
+    plt.xlabel("Decryption Time")
+    plt.ylabel("Frequency")
+    plt.legend()
+    plt.subplot(2, 2, 3)
+    plt.hist(remove_outliers(samples_stats_h0, percentile=percentile), bins=50)
+    plt.axvline(np.mean(remove_outliers(samples_stats_h0, percentile=percentile)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_h0, percentile=percentile)):.4f} ms')
+    plt.title("Hypothesis h0: the last bit is 0 (without outliers)")
+    plt.xlabel("Decryption Time")
+    plt.ylabel("Frequency")
+    plt.legend()
+    plt.subplot(2, 2, 4)
+    plt.hist(remove_outliers(samples_stats_h1, percentile=percentile), bins=50)
+    plt.axvline(np.mean(remove_outliers(samples_stats_h1, percentile=percentile)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_h1, percentile=percentile)):.4f} ms')
+    plt.title("Hypothesis h1: the last bit is 1 (without outliers)")
+    plt.xlabel("Decryption Time")
+    plt.ylabel("Frequency")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+```
+```python
+%| echo: false
+#----------------------------------------------------------------------------
+# Initialization of RSA parameters for the attack
+#----------------------------------------------------------------------------
+
+p_A = 13109499994810966779468866046493465498469807493634236479294124421385342920350717814807375283698575766763256101470694189234369358996750113963585617491399169
+q_A = 9497561827984502554523100157901534504433126034087863778629488755692649311435921364240405549590851856701860175924335776598684751639633322074428628372725777
+n_A = p_A * q_A
+e_A = 4574830074548708213
+m_1 = 123456789132456789
+d_A = 1685394382767324790326942621450485552187209875614438478305225564629345944620726038114923060947436330701451901921041511234432041036987266468290187679773130363479895993621867708066144608084390089775045890165825736468637468786667820591136139480545376198614216373031208691260339805721685482401743494212035728605
+
+RSA_instance = RSA()
+n, e, d = RSA_instance.key_generator(p_A, q_A, e_A)
+RSA_instance.setKeys(d, e, n)
+```
+
+
 == Timing attacks on RSA
 
 Before the exchange of symmetric keys, the client and the server need to perform an RSA encryption and decryption operation to establish a secure communication channel.
@@ -78,6 +528,7 @@ For example, the time it takes to perform the modular exponentiation operation $
 Indeed, a simple implementation of the modular exponentiation operation can use a square-and-multiply algorithm, as described in the following python code:
 
 ```python
+%| execute: false
 def square_and_multiply(y, x, n):
   s = 1
   y %= n
@@ -203,6 +654,188 @@ This property can be exploited to detect errors in the guess for the $b$-th bit.
 Indeed, attacker can keep track of the variance of the time differences and come back to a previous guess if the variance starts to be too similar for both the correct and incorrect guesses, indicating that there might be an error in the previous bits of the guess.
 
 == Code implementation
+
+The code implementation was done first in Python, and then in Rust and C++ to try to reduce the noise in the timing measurements and thus increase the chances of success of the attack.
+
+Indeed, the python implementation was not successful at all in recovering the private key due to the high noise caused by the Python interpreter and its optimizations, which totally masked the timing variations caused by the square-and-multiply algorithm.
+
+=== Sources of noise <noise>
+
+There are several sources of noise that can affect the timing measurements in programming languages, especially in high-level languages like Python.
+
+==== CPU cache effects
+
+CPU cache effects that can cause variability in the timing measurements based on the memory access patterns of the algorithm.
+
+First, there are different levels of CPU cache (L1, L2, L3) that can store recently accessed data and instructions.
+
+These caches are designed to speed up access to frequently used data and instructions, but they can also introduce variability in the timing measurements.
+Indeed, the cache L1 is the fastest but also the smallest, while the cache L3 is the slowest but also the largest, meaning that if the data or instructions needed for the algorithm are in the cache L1, the timing measurements will be faster compared to when they are in the cache L3 or not in the cache at all.
+
+If the data or instructions needed are not in the cache, the CPU triggers a cache miss, which means that it has to fetch the data from the main memory, leading to a significant delay in the execution of the algorithm and thus in the timing measurements.
+
+These cache effects represent a significant source of noise in timing measurements.
+
+==== Branch prediction
+
+Branch prediction is a technique used by modern CPUs to improve performance by guessing the outcome of conditional statements and executing instructions based on those guesses.
+When the CPU encounters a conditional statement (e.g., an if statement), it makes a guess about which branch of the code will be executed next based on past behavior and patterns.
+This allows the CPU to continue executing instructions without waiting for the outcome of the conditional statement, which can improve performance.
+
+So if the CPU correctly predicts the branch, it can continue executing instructions without interruption, but if the CPU incorrectly predicts the branch, it has to discard the incorrectly executed instructions and fetch the correct instructions, leading to a significant delay in the execution of the algorithm and thus in the timing measurements.
+
+That's why branch prediction can cause variability in the timing measurements based on the input values and the internal state of the algorithm, as different inputs can lead to different execution paths and thus different branch predictions.
+
+==== Garbage collection
+
+Garbage collection is a form of automatic memory management that is used in many programming languages, including Python.
+It is responsible for automatically freeing up memory that is no longer in use by the program, which can help prevent memory leaks and improve performance.
+
+However, the garbage collector can be triggered at any time during the execution of the program.
+When the garbage collector runs, it can cause significant delays in the execution of the program: it has to pause the execution of the program, scan the memory for objects that are no longer in use, and free up the memory occupied by those objects.
+
+This can lead to significant variability in the timing measurements since the garbage collector can be triggered at different times during the execution of the algorithm, leading to different timing measurements for the same operations.
+
+==== Multiplication optimizations
+
+The usage of modern programming languages introduces various optimizations that can affect the timing measurements, such as the optimization of multiplication operations.
+
+The multiplication of large integers can be optimized using different algorithms depending on the size of the numbers.
+For small integers, the standard multiplication algorithm is used whereas for larger integers, more efficient algorithms such as Karatsuba or Toom-Cook can be used.
+
+These optimizations can lead to different timing measurements for the same operations based on the size of the numbers being multiplied.
+
+==== Other optimizations
+
+There are also other optimizations that can be introduced by the programming language or the compiler, such as loop unrolling, instruction reordering, or just-in-time compilation, which can further introduce variability in the timing measurements.
+
+So the sources of noise in timing measurements can be quite significant, especially in high-level programming languages like Python, and they can totally mask the timing variations caused by the square-and-multiply algorithm.
+
+=== Reducing the impact of noise
+
+There are several techniques that can be used to try to reduce the impact of these sources of noise in timing measurements.
+
+==== Averaging timing measurements
+
+The first approach can consist to perform a large number of timing measurements for each sample and then use statistical analysis to try to extract the signal from the noise, such as computing the mean or the median of the timing measurements for each sample.
+
+However, as shown on @fig1, there are some samples for which the timing measurements are significantly higher than the others, which can be caused by the garbage collector or other sources of noise described in @noise, and these outliers can significantly affect the mean and thus the analysis of the timing measurements.
+
+Indeed, on the @fig1, we can see that the mean of the timing measurements of the key 0 is higher than the mean of the timing measurements of the key 1, which is not expected since the key 0 should be faster than the key 1 due to the extra multiplication performed when the bit of the key is 1.
+
+```python
+%| echo: false
+%| raw: false
+%| grid-inset: 6pt
+%| label: fig1
+%| plt-axes.grid: false
+
+samples_stats_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, disable_gc=False, warmup_reps=0, progress_bar=False) / 1e6
+samples_stats_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, disable_gc=False, warmup_reps=0, progress_bar=False) / 1e6
+
+plt.figure(figsize=(12, 6))
+plt.suptitle("10000 timing measurements of the decryption operation\non a single ciphertext for two different private keys (0 and 1)")
+plt.subplot(1, 2, 1)
+plt.hist(samples_stats_0, bins=1000)
+plt.axvline(np.mean(samples_stats_0), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_0):.4f} ms')
+plt.title("Key 0")
+plt.xlabel("Decryption Time (ms)")
+plt.ylabel("Frequency")
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.hist(samples_stats_1, bins=1000)
+plt.axvline(np.mean(samples_stats_1), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_1):.4f} ms')
+plt.title("Key 1")
+plt.xlabel("Decryption Time (ms)")
+plt.ylabel("Frequency")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+A way to mitigate the impact of these outliers is to filter them out by removing the timing measurements that are too far from the center of the distribution.
+This can be done by removing the timing measurements that are bellow or above a certain percentile of the distribution, such as bellow 25% and above 75%, which can help to reduce the impact of outliers on the analysis of the timing measurements by keeping only the most representative samples.
+
+However, as shown on @fig2, even after removing the outliers, the average timing measurements for the key 0 are still higher than the average timing measurements for the key 1, which is not expected since the key 0 should be faster than the key 1 due to the extra multiplication performed when the bit of the key is 1.
+
+This can be explained by the fact that the sources of noise described in @noise are still present in the timing measurements, making the averaging of the timing measurements not sufficient to extract the signal from the noise.
+
+```python
+%| echo: false
+%| raw: false
+%| grid-inset: 6pt
+%| label: fig2
+
+plt.figure(figsize=(12, 6))
+plt.suptitle("Removing outliers from the timing measurements\nby keeping only the samples between 25% and 75%")
+plt.subplot(1, 2, 1)
+plt.hist(remove_outliers(samples_stats_0, percentile=25), bins=100)
+plt.axvline(np.mean(remove_outliers(samples_stats_0, percentile=25)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_0, percentile=25)):.4f} ms')
+plt.title("Key 0")
+plt.xlabel("Decryption Time (ms)")
+plt.ylabel("Frequency")
+plt.legend()
+plt.subplot(1, 2, 2)
+plt.hist(remove_outliers(samples_stats_1, percentile=25), bins=100)
+plt.axvline(np.mean(remove_outliers(samples_stats_1, percentile=25)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_1, percentile=25)):.4f} ms')
+plt.title("Key 1")
+plt.xlabel("Decryption Time (ms)")
+plt.ylabel("Frequency")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+==== Warm-up and disabling garbage collection
+
+As making a large number of timing measurements is not sufficient to extract the signal from the noise, another approach can consist to try to reduce the sources of noise in the timing measurements.
+
+As mentioned in @noise, the garbage collector is a significant source of noise in the timing measurements, so one way to reduce the noise is to disable the garbage collector during the timing measurements.
+
+This can be done using the `gc` module in Python, which provides functions to enable and disable the garbage collector.
+
+The obtained results shown on @fig3 are much better than the previous results shown on @fig1 and @fig2, as we can see that the average timing measurements for the key 0 are now lower than the average timing measurements for the key 1 as expected.
+
+```python
+%| echo: false
+%| raw: false
+%| grid-inset: 6pt
+%| label: fig3
+
+samples_stats_no_gc_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, disable_gc=True, warmup_reps=0, progress_bar=False) / 1e6
+samples_stats_no_gc_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, disable_gc=True, warmup_reps=0, progress_bar=False) / 1e6
+
+plot_distributions(samples_stats_no_gc_0, samples_stats_no_gc_1, percentile=25, title="Timing measurements with garbage collection disabled")
+```
+
+Now, the problem is that the two measurements for the key 0 and the key 1 are still quite close to each other.
+To try to further reduce the noise in the timing measurements and improve the distinction between the two keys, we can add a warm-up phase before the timing measurements.
+
+The warm-up phase consists in performing a certain number of decryption operations before the timing measurements.
+In this way, the CPU can load the necessary data and instructions into the cache, and the branch predictor can learn the patterns of the algorithm, which can help to reduce the variance of the timing measurements.
+The warm-up phase is a common technique used in performance benchmarking to ensure that the measurements are more stable and representative of the actual performance of the algorithm.
+
+The obtained results shown on @fig4 have a much better distinction between the two keys compared to the previous results shown on @fig3.
+
+```python
+%| echo: false
+%| raw: false
+%| grid-inset: 6pt
+%| label: fig4
+
+samples_stats_warmup_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, disable_gc=True, warmup_reps=500, progress_bar=False) / 1e6
+samples_stats_warmup_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, disable_gc=True, warmup_reps=500, progress_bar=False) / 1e6
+
+plot_distributions(samples_stats_warmup_0, samples_stats_warmup_1, percentile=25, title="Timing measurements with garbage collection disabled and warm-up phase")
+```
+
+
+
+
+Personally, I have tried to implement the attack in Rust and C++ to try to reduce the noise caused by the Python interpreter and its optimizations, but the attack was still not successful at all in recovering the private key due to the high noise caused by the CPU cache effects, branch prediction, and other optimizations.
 
 I have tried to implement a simple version of the timing attack on RSA in Python, based on the square-and-multiply algorithm for modular exponentiation.
 

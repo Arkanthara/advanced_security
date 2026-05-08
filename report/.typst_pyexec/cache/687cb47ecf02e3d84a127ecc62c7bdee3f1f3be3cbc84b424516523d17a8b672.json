@@ -1,0 +1,66 @@
+{
+  "schema_version": 3,
+  "hash": "687cb47ecf02e3d84a127ecc62c7bdee3f1f3be3cbc84b424516523d17a8b672",
+  "cell_id": "cell_8",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_1.svg",
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_2.svg",
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_3.svg",
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_4.svg"
+  ],
+  "figure_metadata": [
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_1.svg",
+      "figure": 1,
+      "subplot": 1,
+      "is_subplot": true,
+      "title": "Hypothesis h0: the last bit is 0",
+      "suptitle": "Timing measurements with garbage collection disabled and warm-up phase",
+      "row": 0,
+      "col": 0,
+      "rows": 2,
+      "cols": 2
+    },
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_2.svg",
+      "figure": 1,
+      "subplot": 2,
+      "is_subplot": true,
+      "title": "Hypothesis h1: the last bit is 1",
+      "suptitle": "Timing measurements with garbage collection disabled and warm-up phase",
+      "row": 0,
+      "col": 1,
+      "rows": 2,
+      "cols": 2
+    },
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_3.svg",
+      "figure": 1,
+      "subplot": 3,
+      "is_subplot": true,
+      "title": "Hypothesis h0: the last bit is 0 (without outliers)",
+      "suptitle": "Timing measurements with garbage collection disabled and warm-up phase",
+      "row": 1,
+      "col": 0,
+      "rows": 2,
+      "cols": 2
+    },
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_8_1_4.svg",
+      "figure": 1,
+      "subplot": 4,
+      "is_subplot": true,
+      "title": "Hypothesis h1: the last bit is 1 (without outliers)",
+      "suptitle": "Timing measurements with garbage collection disabled and warm-up phase",
+      "row": 1,
+      "col": 1,
+      "rows": 2,
+      "cols": 2
+    }
+  ],
+  "error": null,
+  "status": "ok"
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "hash": "0fe1e4f1805769d224880b70d47d53841ec354963b3e97f0881ea0530f203ae6",
+  "cell_id": "cell_6",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_1.svg",
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_2.svg"
+  ],
+  "figure_metadata": [
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_1.svg",
+      "figure": 1,
+      "subplot": 1,
+      "is_subplot": true,
+      "title": "Key 0",
+      "suptitle": "Removing outliers from the timing measurements\nby keeping only the samples between 25% and 75%",
+      "row": 0,
+      "col": 0,
+      "rows": 1,
+      "cols": 2
+    },
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_2.svg",
+      "figure": 1,
+      "subplot": 2,
+      "is_subplot": true,
+      "title": "Key 1",
+      "suptitle": "Removing outliers from the timing measurements\nby keeping only the samples between 25% and 75%",
+      "row": 0,
+      "col": 1,
+      "rows": 1,
+      "cols": 2
+    }
+  ],
+  "error": null,
+  "status": "ok"
+}
