@@ -1,0 +1,12 @@
+{
+  "schema_version": 3,
+  "hash": "3a3530678f6fcc8aa379af5291811d9337217b7f3e1cfcb4046e0497c7078282",
+  "cell_id": "cell_9",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [],
+  "figure_metadata": [],
+  "error": "\u001b[31m---------------------------------------------------------------------------\u001b[39m\n\u001b[31mTypeError\u001b[39m                                 Traceback (most recent call last)\n\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[14]\u001b[39m\u001b[32m, line 10\u001b[39m\n\u001b[32m      6\u001b[39m num_repetitions = [\u001b[32m10\u001b[39m, \u001b[32m50\u001b[39m, \u001b[32m100\u001b[39m, \u001b[32m500\u001b[39m, \u001b[32m1000\u001b[39m, \u001b[32m5000\u001b[39m, \u001b[32m10000\u001b[39m]\n\u001b[32m      7\u001b[39m mean_key_0 = []\n\u001b[32m      8\u001b[39m mean_key_1 = []\n\u001b[32m      9\u001b[39m \u001b[38;5;28;01mfor\u001b[39;00m num_reps \u001b[38;5;28;01min\u001b[39;00m num_repetitions:\n\u001b[32m---> \u001b[39m\u001b[32m10\u001b[39m     samples_stats_warmup_0 = get_samples_stats(RSA_instance, \u001b[32m0\u001b[39m, num_samples=num_reps, disable_gc=\u001b[38;5;28;01mTrue\u001b[39;00m, warmup_reps=\u001b[32m200\u001b[39m, progress_bar=\u001b[38;5;28;01mFalse\u001b[39;00m) / \u001b[32m1e6\u001b[39m\n\u001b[32m     11\u001b[39m     samples_stats_warmup_1 = get_samples_stats(RSA_instance, \u001b[32m1\u001b[39m, num_samples=num_reps, disable_gc=\u001b[38;5;28;01mTrue\u001b[39;00m, warmup_reps=\u001b[32m200\u001b[39m, progress_bar=\u001b[38;5;28;01mFalse\u001b[39;00m) / \u001b[32m1e6\u001b[39m\n\u001b[32m     12\u001b[39m     mean_key_0.append(np.mean(remove_outliers(samples_stats_warmup_0)))\n\u001b[32m     13\u001b[39m     mean_key_1.append(np.mean(remove_outliers(samples_stats_warmup_1)))\n\n\u001b[31mTypeError\u001b[39m: get_samples_stats() got an unexpected keyword argument 'disable_gc'",
+  "status": "error"
+}

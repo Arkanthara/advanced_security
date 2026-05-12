@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "hash": "c9b93d1c79402358c130a08ccd90f1fd2bcc7503ec6044fbd58fe077c7e4d09e",
+  "cell_id": "cell_6",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_1.svg",
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_2.svg"
+  ],
+  "figure_metadata": [
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_1.svg",
+      "figure": 1,
+      "subplot": 1,
+      "is_subplot": true,
+      "title": "Small key size",
+      "suptitle": "Comparison of differences with (h1) and without (h0) extra multiplications with and without warm-up phase",
+      "row": 0,
+      "col": 0,
+      "rows": 1,
+      "cols": 2
+    },
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_2.svg",
+      "figure": 1,
+      "subplot": 2,
+      "is_subplot": true,
+      "title": "Big key size",
+      "suptitle": "Comparison of differences with (h1) and without (h0) extra multiplications with and without warm-up phase",
+      "row": 0,
+      "col": 1,
+      "rows": 1,
+      "cols": 2
+    }
+  ],
+  "error": null,
+  "status": "ok"
+}

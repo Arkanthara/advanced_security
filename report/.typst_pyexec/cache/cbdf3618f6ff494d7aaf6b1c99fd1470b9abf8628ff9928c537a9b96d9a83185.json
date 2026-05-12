@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "hash": "cbdf3618f6ff494d7aaf6b1c99fd1470b9abf8628ff9928c537a9b96d9a83185",
+  "cell_id": "cell_5",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_1.svg",
+    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_2.svg"
+  ],
+  "figure_metadata": [
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_1.svg",
+      "figure": 1,
+      "subplot": 1,
+      "is_subplot": true,
+      "title": "Manual GC disable",
+      "suptitle": "Comparison of timing measurements with manual garbage collector (GC) disable versus using timeit (GC handled automatically)",
+      "row": 0,
+      "col": 0,
+      "rows": 1,
+      "cols": 2
+    },
+    {
+      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_5_1_2.svg",
+      "figure": 1,
+      "subplot": 2,
+      "is_subplot": true,
+      "title": "Using timeit (GC handled automatically)",
+      "suptitle": "Comparison of timing measurements with manual garbage collector (GC) disable versus using timeit (GC handled automatically)",
+      "row": 0,
+      "col": 1,
+      "rows": 1,
+      "cols": 2
+    }
+  ],
+  "error": null,
+  "status": "ok"
+}

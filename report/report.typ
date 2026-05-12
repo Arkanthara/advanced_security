@@ -6,12 +6,13 @@
 // Main content
 #show: make-report.with(my-report)
 #show raw.where(block: true): set block(fill: luma(240), inset: 1em, radius: 0.5em, width: 100%)
-#show raw.where(block: false): box.with(
-  fill: rgb("#e573e927"),
-  inset: (x: 3pt, y: 0pt),
-  outset: (y: 3pt),
-  radius: 2pt,
-)
+// #show raw.where(block: false): set block(fill: luma(240), inset: 1em, radius: 0.5em, width: 100%)
+// #show raw.where(block: false): box.with(
+//   fill: rgb("#e573e927"),
+//   inset: (x: 3pt, y: 0pt),
+//   outset: (y: 3pt),
+//   radius: 2pt,
+// )
 
 = Introduction
 
@@ -66,6 +67,7 @@ For convenience, we will use the following notations throughout the report:
 
 ```python
 %| echo: false
+import os
 import timeit
 import random
 import numpy as np
@@ -225,17 +227,6 @@ class RSA:
                 if pgcd == 1:
                     break
         return n, e, d
-
-def remove_outliers(samples, percentile=0.25):
-    samples = np.asarray(samples)
-    
-    if percentile >= 1:
-        percentile /= 100
-    
-    down = np.percentile(samples, percentile * 100)
-    up = np.percentile(samples, (1 - percentile) * 100)
-    
-    return samples[(samples >= down) & (samples <= up)]
 
 def collect_samples(
     RSA_instance: RSA,
@@ -492,34 +483,20 @@ def get_samples_stats(
 
     return np.array(raw, dtype=np.float64)
 
-def plot_distributions(samples_stats_h0: np.ndarray, samples_stats_h1: np.ndarray, percentile=25, title: str = "Distribution of decryption times for two hypotheses with branch prediction"):
-    plt.figure(figsize=(12, 8))
+def plot_distributions(samples_stats_h0: np.ndarray, samples_stats_h1: np.ndarray, title: str = "Distribution of decryption times for two hypotheses with branch prediction"):
+    plt.figure(figsize=(12, 6))
     plt.suptitle(title)
-    plt.subplot(2, 2, 1)
+    plt.subplot(1, 2, 1)
     plt.hist(samples_stats_h0, bins=200)
-    plt.axvline(np.mean(samples_stats_h0), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_h0):.4f} ms')
+    plt.axvline(np.min(samples_stats_h0), color='red', linestyle='dashed', linewidth=1, label=f'Min: {np.min(samples_stats_h0):.4f} ms')
     plt.title("Hypothesis h0: the last bit is 0")
     plt.xlabel("Decryption Time")
     plt.ylabel("Frequency")
     plt.legend()
-    plt.subplot(2, 2, 2)
+    plt.subplot(1, 2, 2)
     plt.hist(samples_stats_h1, bins=200)
-    plt.axvline(np.mean(samples_stats_h1), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(samples_stats_h1):.4f} ms')
+    plt.axvline(np.min(samples_stats_h1), color='red', linestyle='dashed', linewidth=1, label=f'Min: {np.min(samples_stats_h1):.4f} ms')
     plt.title("Hypothesis h1: the last bit is 1")
-    plt.xlabel("Decryption Time")
-    plt.ylabel("Frequency")
-    plt.legend()
-    plt.subplot(2, 2, 3)
-    plt.hist(remove_outliers(samples_stats_h0, percentile=percentile), bins=50)
-    plt.axvline(np.mean(remove_outliers(samples_stats_h0, percentile=percentile)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_h0, percentile=percentile)):.4f} ms')
-    plt.title("Hypothesis h0: the last bit is 0 (without outliers)")
-    plt.xlabel("Decryption Time")
-    plt.ylabel("Frequency")
-    plt.legend()
-    plt.subplot(2, 2, 4)
-    plt.hist(remove_outliers(samples_stats_h1, percentile=percentile), bins=50)
-    plt.axvline(np.mean(remove_outliers(samples_stats_h1, percentile=percentile)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_h1, percentile=percentile)):.4f} ms')
-    plt.title("Hypothesis h1: the last bit is 1 (without outliers)")
     plt.xlabel("Decryption Time")
     plt.ylabel("Frequency")
     plt.legend()
@@ -545,7 +522,7 @@ RSA_instance.setKeys(d, e, n)
 ```
 
 
-== Timing attacks on RSA
+== Variance-based timing attack
 
 Before the exchange of symmetric keys, the client and the server need to perform an RSA encryption and decryption operation to establish a secure communication channel.
 The timing of these operations can be exploited by attackers to infer information about the private key.
@@ -553,7 +530,7 @@ The timing of these operations can be exploited by attackers to infer informatio
 As mentioned earlier, the security of RSA relies on the difficulty of factoring large integers, but the implementation of RSA can introduce vulnerabilities that can be exploited by attackers.
 The goal of the attacker is to recover the unknown private key $d$ thanks to the knowledge of the public key $(n, e)$ and the ability to perform encryption and decryption operations on the server using the RSA algorithm.
 
-== Square-and-multiply algorithm
+=== Square-and-multiply algorithm
 
 Timing attacks on RSA exploit the fact that the time it takes to perform certain operations in the RSA algorithm can vary based on the input values and the internal state of the algorithm.
 For example, the time it takes to perform the modular exponentiation operation $c^d mod n$ can vary based on the value of $d$ and the input ciphertext $c$.
@@ -602,7 +579,7 @@ But the timing of this algorithm can vary based on the value of the exponent $x$
 Indeed, as seen in the above example, the algorithm performs an extra multiplication only when the bit of $x$ is 1, which can lead to a longer execution time compared to when the bit is 0.
 This variation in timing is the basis for timing attacks on RSA.
 
-== Exploiting timing variations
+=== Exploiting timing variations
 
 Attackers can exploit the timing variations in the square-and-multiply algorithm to recover the private key $d$ by measuring the time it takes for the server to perform decryption operations.
 Note that the attacker must know the modulus $n$, which is public.
@@ -685,17 +662,17 @@ So when the guess $x_b$ has some previous errors, the variance of the correct gu
 This property can be exploited to detect errors in the guess for the $b$-th bit.
 Indeed, attacker can keep track of the variance of the time differences and come back to a previous guess if the variance starts to be too similar for both the correct and incorrect guesses, indicating that there might be an error in the previous bits of the guess.
 
-== Code implementation
+=== Code implementation
 
 The code implementation was done first in Python, and then in Rust and C++ to try to reduce the noise in the timing measurements and thus increase the chances of success of the attack.
 
 Indeed, the python implementation was not successful at all in recovering the private key due to the high noise caused by the Python interpreter and its optimizations, which totally masked the timing variations caused by the square-and-multiply algorithm.
 
-=== Sources of noise <noise>
+==== Sources of noise <noise>
 
 There are several sources of noise that can affect the timing measurements in programming languages, especially in high-level languages like Python.
 
-==== CPU cache effects
+===== CPU cache effects
 
 CPU cache effects that can cause variability in the timing measurements based on the memory access patterns of the algorithm.
 
@@ -708,7 +685,7 @@ If the data or instructions needed are not in the cache, the CPU triggers a cach
 
 These cache effects represent a significant source of noise in timing measurements.
 
-==== Branch prediction
+===== Branch prediction
 
 Branch prediction is a technique used by modern CPUs to improve performance by guessing the outcome of conditional statements and executing instructions based on those guesses.
 When the CPU encounters a conditional statement (e.g., an if statement), it makes a guess about which branch of the code will be executed next based on past behavior and patterns.
@@ -718,7 +695,7 @@ So if the CPU correctly predicts the branch, it can continue executing instructi
 
 That's why branch prediction can cause variability in the timing measurements based on the input values and the internal state of the algorithm, as different inputs can lead to different execution paths and thus different branch predictions.
 
-==== Garbage collection
+===== Garbage collection
 
 Garbage collection is a form of automatic memory management that is used in many programming languages, including Python.
 It is responsible for automatically freeing up memory that is no longer in use by the program, which can help prevent memory leaks and improve performance.
@@ -728,7 +705,7 @@ When the garbage collector runs, it can cause significant delays in the executio
 
 This can lead to significant variability in the timing measurements since the garbage collector can be triggered at different times during the execution of the algorithm, leading to different timing measurements for the same operations.
 
-==== Multiplication optimizations
+===== Multiplication optimizations
 
 The usage of modern programming languages introduces various optimizations that can affect the timing measurements, such as the optimization of multiplication operations.
 
@@ -737,200 +714,493 @@ For small integers, the standard multiplication algorithm is used whereas for la
 
 These optimizations can lead to different timing measurements for the same operations based on the size of the numbers being multiplied.
 
-==== Other optimizations
+===== Other optimizations
 
 There are also other optimizations that can be introduced by the programming language or the compiler, such as loop unrolling, instruction reordering, or just-in-time compilation, which can further introduce variability in the timing measurements.
 
 So the sources of noise in timing measurements can be quite significant, especially in high-level programming languages like Python, and they can totally mask the timing variations caused by the square-and-multiply algorithm.
 
-=== Reducing the impact of noise
+==== Reducing the impact of noise
 
 There are several techniques that can be used to try to reduce the impact of these sources of noise in timing measurements.
 
-==== Averaging timing measurements
+Inspired by the blog post "Kocher's Timing Attack: A Journey from Theory to Practice" @kocher_jupyter, I try to implement some of them, trying to mitigate the impact of noise and thus increase the chances of success of the attack.
 
-The first approach can consist to perform a large number of timing measurements for each sample and then use statistical analysis to try to extract the signal from the noise, such as computing the mean or the median of the timing measurements for each sample.
+===== Reducing the impact of the garbage collector
 
-However, as shown on @fig1, there are some samples for which the timing measurements are significantly higher than the others, which can be caused by the garbage collector or other sources of noise described in @noise, and these outliers can significantly affect the mean and thus the analysis of the timing measurements.
+As mentioned in @noise, the garbage collector is a significant source of noise in the timing measurements, so one way to reduce the noise is to disable the garbage collector during the timing measurements.
 
-Indeed, on the @fig1, we can see that the mean of the timing measurements of the key 0 is higher than the mean of the timing measurements of the key 1, which is not expected since the key 0 should be faster than the key 1 due to the extra multiplication performed when the bit of the key is 1.
+This can be done manually using the `gc` module in Python, which provides functions to enable and disable the garbage collector.
+Even if this can help to reduce the noise caused by the garbage collector, it is not sufficient to extract the signal from the noise and thus distinguish between the case with the extra multiplication (key 1) and the case without the extra multiplication (key 0) since there are still other sources of noise that can affect the timing measurements.
+
+However the right approach to perform the precise timing measurements was not to manually disable the garbage collector, but rather to use the `timeit` module in Python, which is designed to perform accurate timing measurements.
+
+Indeed, the `timeit` module, which is a part of the Python standard library, is specifically designed for measuring the execution time of small code snippets with high precision.
+It automatically handles various sources of noise, including disabling the garbage collector during the timing measurements, which can help to reduce the impact of the garbage collector on the timing measurements and thus increase the chances of success of the attack.
+
+The @fig1 shows the comparison of timing measurements with manual management of the garbage collector (GC) and using the `timeit` module, which handles GC automatically.
+It is done by repeating the timing measurements for a fixed ciphertext and fixed key, and then plotting the distribution of the timing measurements for both approaches.
+We can easily see that the timing measurements obtained with the `timeit` module are much more consistent and less noisy compared to the timing measurements obtained with manual management of the garbage collector.
+
+Indeed, with the `timeit` module, the timing measurements are more concentrated around a certain value since the pick of frequency of the timing measurements with same value is around 10 times higher than with the manual management of the garbage collector, which means that the timing measurements obtained with the `timeit` module are more consistent and less affected by noise compared to the timing measurements obtained with manual management of the garbage collector.
+
+On top of that, the minimum timing measurement obtained with the `timeit` module is 100 times lower than the minimum timing measurement obtained with manual management of the garbage collector, which means that the `timeit` module is able to capture the true decryption time more accurately compared to the manual management of the garbage collector.
+This means that the `timeit` module allows to reduce more noise than only the noise caused by the garbage collector, and thus is a much better approach to perform the timing measurements for the attack compared to the manual management of the source of noise.
+That's why I used the `timeit` module for the timing measurements in the attack implementation instead of manually disabling the garbage collector.
 
 ```python
 %| echo: false
 %| raw: false
 %| grid-inset: 6pt
 %| label: fig1
-%| plt-axes.grid: false
 
-samples_stats_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, warmup_reps=0, progress_bar=False)
-samples_stats_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, warmup_reps=0, progress_bar=False)
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-fig.suptitle(
-    "10 000 timing measurements of the decryption operation\n"
-    "on a single ciphertext for two different private keys (0 and 1)"
-)
+import gc
+import time
 
-for ax, samples, title in zip(
-    axes,
-    [samples_stats_0, samples_stats_1],
-    ["Key 0", "Key 1"],
-):
-    min_val = samples.min()
+def get_samples_stats_manual(
+    RSA_instance: RSA,
+    d_A: int,
+    num_samples: int = 10000,
+    disable_gc: bool = True,
+    warmup_reps: int = 0,
+    progress_bar: bool = True,
+) -> np.ndarray:
+    """
+    Collect decryption times for a fixed ciphertext.
 
-    ax.hist(samples, bins=1000)
-    ax.axvline(
-        min_val,
-        color="red",
-        linestyle="dashed",
-        linewidth=1,
-        label=f"Min: {min_val:.4f} ns",   # min = best estimate of true time
-    )
-    ax.set_title(title)
-    ax.set_xlabel("Decryption time (ns)")
-    ax.set_ylabel("Frequency")
-    ax.legend()
+    Parameters
+    ----------
+    RSA_instance : RSA
+    d_A : int
+        Private key.
+    num_samples : int
+    disable_gc : bool
+        Disable GC during measurement (default: True).
+    warmup_reps : int
+        Warm-up iterations before measurement (0 = no warm-up).
+    progress_bar : bool
+        Show progress bar during measurement (default: True).
+    Returns
+    -------
+    np.ndarray  shape (num_samples,), times in nanoseconds.
+    """
+    if disable_gc:
+        gc.disable()
+        gc.collect()
 
+    # Localize hot references
+    decrypt_fn = RSA_instance.decrypt
+    perf_ns    = time.perf_counter_ns
+
+    # Warm-up
+    for _ in tqdm(range(warmup_reps), desc="Warm-up", disable=not progress_bar, leave=False):
+        decrypt_fn(d_A)
+
+    # Pre-allocated buffer
+    samples = np.empty(num_samples, dtype=np.int64)
+    for i in tqdm(range(num_samples), desc="Sampling", disable=not progress_bar, leave=False):
+        t0 = perf_ns()
+        decrypt_fn(d_A)
+        samples[i] = perf_ns() - t0
+
+    if disable_gc:
+        gc.enable()
+
+    return samples
+
+samples_stats_0_manual = get_samples_stats_manual(RSA_instance, 0, num_samples=1000, disable_gc=True, warmup_reps=0, progress_bar=False)
+samples_stats_1_timeit = get_samples_stats(RSA_instance, 0, num_samples=1000, warmup_reps=0, progress_bar=False)
+
+plt.figure(figsize=(12, 6))
+plt.suptitle("Comparison of timing measurements with manual garbage collector (GC) disable versus using timeit (GC handled automatically)")
+plt.subplot(1, 2, 1)
+plt.hist(samples_stats_0_manual, bins=200)
+plt.title("Manual GC disable")
+plt.xlabel("Decryption Time (ns)")
+plt.ylabel("Frequency")
+plt.subplot(1, 2, 2)
+plt.hist(samples_stats_1_timeit, bins=200)
+plt.title("Using timeit")
+plt.xlabel("Decryption Time (ns)")
+plt.ylabel("Frequency")
 plt.tight_layout()
 plt.show()
 ```
 
-A way to mitigate the impact of these outliers is to filter them out by removing the timing measurements that are too far from the center of the distribution.
-This can be done by removing the timing measurements that are bellow or above a certain percentile of the distribution, such as bellow 25% and above 75%, which can help to reduce the impact of outliers on the analysis of the timing measurements by keeping only the most representative samples.
 
-However, as shown on @fig2, even after removing the outliers, the average timing measurements for the key 0 are still higher than the average timing measurements for the key 1, which is not expected since the key 0 should be faster than the key 1 due to the extra multiplication performed when the bit of the key is 1.
+===== Averaging timing measurements
 
-This can be explained by the fact that the sources of noise described in @noise are still present in the timing measurements, making the averaging of the timing measurements not sufficient to extract the signal from the noise.
+Once the garbage collector is disabled, there are still other sources of noise that can affect the timing measurements, as described in @noise.
+
+The most common approach to try to extract the signal from the noise in timing measurements is to perform a large number of timing measurements and then average them.
+Indeed, by performing a large number of timing measurements and then averaging them, we can reduce the impact of random fluctuations in the timing measurements.
+
+However, as shown on @fig1, there are some samples for which the timing measurements are significantly higher than the others due to the sources of noise described in @noise, which can skew the average and thus make it not representative of the true decryption time.
+
+To solve this problem, the first idea was to remove the outliers from the timing measurements by filtering out the timing measurements that are too far from the center of the distribution, such as bellow 25% and above 75%, which can help to reduce the impact of outliers on the analysis of the timing measurements by keeping only the most representative samples.
+
+But is the averaging of the timing measurements sufficient to extract the signal from the noise and thus distinguish between the case with the extra multiplication (key 1) and the case without the extra multiplication (key 0) ?
+Of course, not.
+It was my first approach to try reducing the impact of noise, but it was not sufficient to extract the signal from the noise and thus distinguish between the two cases.
+Indeed, when I was using a manual approach to disable the garbage collector, I was not able to distinguish between the two cases even after removing the outliers from the timing measurements, which can be explained by the fact that there are still other sources of noise that can affect the timing measurements, making the averaging of the timing measurements not sufficient to extract the signal from the noise.
+
+In fact, the noise in the timing measurements is an additive noise, meaning that it can only add latency to the timing measurements, but it can never subtract latency from the timing measurements.
+This means that the minimum timing measurement is the best estimator of the true decryption time, as the minimum timing measurement is the one that is least affected by the noise, while the other timing measurements can be significantly affected by the noise and thus can be much higher than the true decryption time.
+So contrary to the average that can be skewed by outliers, the minimum timing measurement is the right approach to extract the signal from the noise.
+
+===== Warm-up and optimizations of parameters
+
+To reduce the impact of noise caused by the CPU cache effects and branch prediction, a warm-up phase was added before the timing measurements.
+
+The warm-up phase consists in performing a certain number of decryption operations before the timing measurements.
+This allows the CPU to load the relevant data and instructions into the cache and the branch predictor to learn the execution patterns of the algorithm, which can help to reduce the impact of noise caused by these factors and thus increase the chances of success of the attack.
+
+However, by looking at the results with and without the warm-up phase in @fig2, we can see that the warm-up phase does not have a significant impact on the timing measurements, and thus does not help to reduce the impact of noise caused by the CPU cache effects and branch prediction.
+Perhaps that the `timeit` module already handles some of the optimizations that can be achieved with a warm-up phase, such as loading the relevant data and instructions into the cache and learning the execution patterns of the algorithm, which can explain why the warm-up phase does not have a significant impact on the timing measurements.
+
+So the attack will be implemented without a warm-up phase, as it does not seem to have a significant impact on the timing measurements and thus does not help to reduce the impact of noise caused by the CPU cache effects and branch prediction.
+This allows to reduce the time taken for the attack, as the warm-up phase can be quite time-consuming, especially if we want to perform a large number of repetitions of the timing measurements.
 
 ```python
+%| timeout: 3600
 %| echo: false
 %| raw: false
 %| grid-inset: 6pt
 %| label: fig2
 
-plt.figure(figsize=(12, 6))
-plt.suptitle("Removing outliers from the timing measurements\nby keeping only the samples between 25% and 75%")
-plt.subplot(1, 2, 1)
-plt.hist(remove_outliers(samples_stats_0, percentile=25), bins=100)
-plt.axvline(np.mean(remove_outliers(samples_stats_0, percentile=25)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_0, percentile=25)):.4f} ms')
-plt.title("Key 0")
-plt.xlabel("Decryption Time (ms)")
-plt.ylabel("Frequency")
-plt.legend()
-plt.subplot(1, 2, 2)
-plt.hist(remove_outliers(samples_stats_1, percentile=25), bins=100)
-plt.axvline(np.mean(remove_outliers(samples_stats_1, percentile=25)), color='red', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(remove_outliers(samples_stats_1, percentile=25)):.4f} ms')
-plt.title("Key 1")
-plt.xlabel("Decryption Time (ms)")
-plt.ylabel("Frequency")
-plt.legend()
+big_key = d_A & ((1 << 1000) - 1)
+h0_big_key = big_key
+h1_big_key = big_key | (1 << 1000)
 
+samples_stats_0_warmup = []
+samples_stats_1_warmup = []
+samples_stats_0_no_warmup = []
+samples_stats_1_no_warmup = []
+
+samples_stats_0_warmup_big_key = []
+samples_stats_1_warmup_big_key = []
+samples_stats_0_no_warmup_big_key = []
+samples_stats_1_no_warmup_big_key = []
+
+for _ in range(20):
+    samples_stats_0_warmup.append(np.min(get_samples_stats(RSA_instance, 0, num_samples=1000, warmup_reps=200, progress_bar=False)))
+    samples_stats_1_warmup.append(np.min(get_samples_stats(RSA_instance, 1, num_samples=1000, warmup_reps=200, progress_bar=False)))
+    samples_stats_0_no_warmup.append(np.min(get_samples_stats(RSA_instance, 0, num_samples=1000, warmup_reps=0, progress_bar=False)))
+    samples_stats_1_no_warmup.append(np.min(get_samples_stats(RSA_instance, 1, num_samples=1000, warmup_reps=0, progress_bar=False)))
+
+    samples_stats_0_warmup_big_key.append(np.min(get_samples_stats(RSA_instance, h0_big_key, num_samples=1000, warmup_reps=200, progress_bar=False)))
+    samples_stats_1_warmup_big_key.append(np.min(get_samples_stats(RSA_instance, h1_big_key, num_samples=1000, warmup_reps=200, progress_bar=False)))
+    samples_stats_0_no_warmup_big_key.append(np.min(get_samples_stats(RSA_instance, h0_big_key, num_samples=1000, warmup_reps=0, progress_bar=False)))
+    samples_stats_1_no_warmup_big_key.append(np.min(get_samples_stats(RSA_instance, h1_big_key, num_samples=1000, warmup_reps=0, progress_bar=False)))
+
+plt.figure(figsize=(12, 10))
+plt.suptitle("Comparison of differences with (h1) and without (h0) extra multiplications with and without warm-up phase with minimum timing measurements for small and big key sizes")
+plt.subplot(2, 1, 1)
+plt.title("Small key size")
+plt.plot(samples_stats_0_warmup, label="h0 with warm-up")
+plt.plot(samples_stats_1_warmup, label="h1 with warm-up")
+plt.plot(samples_stats_0_no_warmup, label="h0 without warm-up")
+plt.plot(samples_stats_1_no_warmup, label="h1 without warm-up")
+plt.xlabel("Number of repetitions")
+plt.ylabel("Decryption Time (ns)")
+plt.legend()
+plt.subplot(2, 1, 2)
+plt.title("Big key size")
+plt.plot(samples_stats_0_warmup_big_key, label="h0 with warm-up")
+plt.plot(samples_stats_1_warmup_big_key, label="h1 with warm-up")
+plt.plot(samples_stats_0_no_warmup_big_key, label="h0 without warm-up")
+plt.plot(samples_stats_1_no_warmup_big_key, label="h1 without warm-up")
+plt.xlabel("Number of repetitions")
+plt.ylabel("Decryption Time (ns)")
+plt.legend()
 plt.tight_layout()
 plt.show()
 ```
 
-==== Warm-up and disabling garbage collection
+If we look at the results obtained with the big key size, we can see that it starts to be more difficult to distinguish between the two cases with and without the extra multiplication, which can be explained by the fact that the timing variations caused by the square-and-multiply algorithm are smaller for larger key sizes, making it more difficult to extract the signal from the noise and thus distinguish between the two cases.
+This can be problematic for the attack, as it relies on the ability to distinguish between the two cases with and without the extra multiplication to recover the bits of the private key $d$.
 
-As making a large number of timing measurements is not sufficient to extract the signal from the noise, another approach can consist to try to reduce the sources of noise in the timing measurements.
+So I tried in @fig3 to analyze the minimum repetitions needed to start to be able to distinguish between the two cases with and without the extra multiplication for a big key size, by plotting the minimum decryption time obtained for both cases with different numbers of repetitions of timing measurements.
+Each measurement is repeated 10 times to try to reduce the impact of noise, allowing to better visualize if the two cases are distinguishable or not.
 
-As mentioned in @noise, the garbage collector is a significant source of noise in the timing measurements, so one way to reduce the noise is to disable the garbage collector during the timing measurements.
+The results show that for a big key size, it starts to be possible to distinguish between the two cases when we perform around 10000 repetitions of timing measurements, which can be quite time-consuming...
 
-This can be done using the `gc` module in Python, which provides functions to enable and disable the garbage collector.
 
-The obtained results shown on @fig3 are much better than the previous results shown on @fig1 and @fig2, as we can see that the average timing measurements for the key 0 are now lower than the average timing measurements for the key 1 as expected.
 
 ```python
+%| timeout: 3600
 %| echo: false
 %| raw: false
 %| grid-inset: 6pt
 %| label: fig3
 
-samples_stats_no_gc_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, disable_gc=True, warmup_reps=0, progress_bar=False) / 1e6
-samples_stats_no_gc_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, disable_gc=True, warmup_reps=0, progress_bar=False) / 1e6
 
-plot_distributions(samples_stats_no_gc_0, samples_stats_no_gc_1, percentile=25, title="Timing measurements with garbage collection disabled")
+def plot_repetition_convergence(
+    RSA_instance: RSA,
+    d_h0: int,
+    d_h1: int,
+    sample_counts: list = [1, 10, 100, 500, 1000, 2000, 5000],
+    n_runs: int = 10,
+):
+    h0_means = []
+    h1_means = []
+
+    for n in sample_counts:
+        tmp_h0 = []
+        tmp_h1 = []
+        for _ in range(n_runs):
+            tmp_h0.append(np.min(get_samples_stats(RSA_instance, d_h0, num_samples=n, warmup_reps=0)))
+            tmp_h1.append(np.min(get_samples_stats(RSA_instance, d_h1, num_samples=n, warmup_reps=0)))
+        h0_means.append(np.mean(tmp_h0))
+        h1_means.append(np.mean(tmp_h1))
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(sample_counts, h0_means, label='h0')
+    plt.plot(sample_counts, h1_means, label='h1')
+    plt.xscale('log')
+    plt.xlabel('Number of samples')
+    plt.ylabel('Minimum decryption time (ns)')
+    plt.title('Convergence of minimum decryption time with number of samples')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+big_key = d_A & ((1 << 1000) - 1)
+h0_big_key = big_key
+h1_big_key = big_key | (1 << 1000)
+
+plot_repetition_convergence(RSA_instance, h0_big_key, h1_big_key, sample_counts=[1, 10, 100, 500, 1000, 2000, 3000, 5000, 7000, 10000], n_runs=10)
 ```
 
-Now, the problem is that the two measurements for the key 0 and the key 1 are still quite close to each other.
-To try to further reduce the noise in the timing measurements and improve the distinction between the two keys, we can add a warm-up phase before the timing measurements.
+==== Performance of the attack
 
-The warm-up phase consists in performing a certain number of decryption operations before the timing measurements.
-In this way, the CPU can load the necessary data and instructions into the cache, and the branch predictor can learn the patterns of the algorithm, which can help to reduce the variance of the timing measurements.
-The warm-up phase is a common technique used in performance benchmarking to ensure that the measurements are more stable and representative of the actual performance of the algorithm.
+I first tried to implement the attack in Python with a simple version that does not look after noise, but it was not successful at all in recovering the private key due to the high noise caused by the Python interpreter and its optimizations, which totally masked the timing variations caused by the square-and-multiply algorithm.
+Indeed, the error rate was at best around 50%, meaning that the attack was not able to distinguish between the two cases and make only random guesses for the bits of the private key $d$.
 
-The obtained results shown on @fig4 have a much better distinction between the two keys compared to the previous results shown on @fig3.
+Then, I implemented a version that uses repeated timing measurements and that looks after the garbage collector, but it was still not successful at all in recovering the private key.
+This is perhaps due to the fact that I was using the average of the timing measurements instead of the minimum.
+Note that I thought to remove the outliers from the timing measurements to try to reduce the impact of noise, but it was not sufficient to extract the signal from the noise.
+
+Finally, I tried to implement the attack in Python with the improvements described above, and I run it for 13 hours to try to recover the private key $d$ with a key size of 1024 bits.
+I only managed to recover 5 bits of the private key $d$ using 1000 messages and 10000 repetitions of timing measurements for each message.
+And I have assumed that the first 16 bits of the private key $d$ are known.
+I use 3 candidates per iteration to try to reduce the impact of errors in the previous bits on the variance and thus reduce the number of errors in the recovered private key.
+
+On the obtained results, we can see that one of the candidates has an error rate of 0%, meaning that it is the correct private key, while the other candidates have an error rate of 20%, meaning that they have some errors in the recovered bits of the private key.
+This means that the attack was successful in recovering some bits of the private key.
+But due to the computational cost of the attack, I was not able to recover more than 5 bits of the private key $d$ in a reasonable time.
+
+```raw
+Iteration 1/5: bit guessed = 1  (var h0 = 1.5563e+08, var h1 = 1.5628e+08)  ✗ WRONG
+                                                   
+Iteration 2/5: bit guessed = 1  (var h0 = 1.5586e+08, var h1 = 1.5514e+08)  ✓ CORRECT
+                                                   
+Iteration 3/5: bit guessed = 1  (var h0 = 1.5520e+08, var h1 = 1.5653e+08)  ✓ CORRECT
+                                                   
+Iteration 4/5: bit guessed = 0  (var h0 = 1.5497e+08, var h1 = 1.5614e+08)  ✓ CORRECT
+                                                   
+Iteration 5/5: bit guessed = 1  (var h0 = 1.5522e+08, var h1 = 1.5507e+08)  ✓ CORRECT
+
+────────────────────────────────────────
+Candidate #1
+  Key:        1234141
+  Variance:   1.5475e+08
+  Error rate: 20.00%  (1/5 bits wrong)
+────────────────────────────────────────
+Candidate #2
+  Key:        1496285
+  Variance:   1.5507e+08
+  Error rate: 0.00%  (0/5 bits wrong)
+────────────────────────────────────────
+Candidate #3
+  Key:        447709
+  Variance:   1.5522e+08
+  Error rate: 20.00%  (1/5 bits wrong)
+────────────────────────────────────────
+```
+
+== Pearson-based timing attack
+
+To exploit more efficiently the timing variations in the square-and-multiply algorithm, it is possible to use the Pearson correlation coefficient instead of the variance to determine which guess for the bit of the private key $d$ is more likely to be correct.
+
+=== Pearson correlation coefficient
+
+The Pearson correlation coefficient is a measure of the linear correlation between two variables, in this case, the timing measurements and the expected timings based on the guess for the bit of the private key $d$.
+
+The Pearson correlation coefficient can be formally defined as:
+
+#let Cov = math.op("Cov")
+#let Var = math.op("Var")
+
+$ r = Cov(T, t(C, x_b))/(sigma_T sigma_(t(C, x_b))) $
+
+with:
+- $r$ the Pearson correlation coefficient.
+- $C$ the set of ciphertexts $C = {c_1, c_2, ..., c_n}$.
+- $T$ the vector of timing measurements obtained from the server for the set of ciphertexts $C$.
+- $t(C, x_b)$ the vector of expected timings based on the guess $x_b$ for the bit of the private key $d$ for the set of ciphertexts $C$.
+- $sigma_T$ the standard deviation of the timing measurements $T$.
+- $sigma_(t(C, x_b))$ the standard deviation of the expected timings $t(C, x_b)$.
+
+A value close to 1 indicates a strong positive correlation, meaning that the timing measurements and the expected timings are closely related
+A value close to -1 indicates a strong negative correlation, and a value close to 0 indicates no linear correlation.
+
+As we want that our guess for the bit of the private key $d$ explains the timing variations in the square-and-multiply algorithm, we want to maximize the Pearson correlation between the timing measurements and the expected timings.
+
+Depending on the model of the expected timings based on the guess for the bit of the private key $d$, it is possible to have a positive or negative correlation between the timing measurements and the expected timings, meaning that the model of the expected timings is inverted compared to the timing measurements.
+
+So we are more interested in the strength of the correlation rather than its sign, meaning that we want to maximize the absolute value of the Pearson correlation coefficient between the timing measurements and the expected timings.
+
+=== Designing the model of expected timings
+
+The idea is to create a function $t(C, x_b)$ that estimates the expected timings based on the guess $x_b$ and the set of ciphertexts $C$.
+Indeed, the model must take into account the size of the ciphertexts that lead to different timings for the decryption operation, as well as the guess for the bit of the private key $d$ that leads to different execution paths in the square-and-multiply algorithm and thus different timings.
+
+A simple approach can consist to use the Hamming weight of the intermediate values in the square-and-multiply algorithm as a model for the expected timings.
+The Hamming weight of a binary number is the number of bits that are set to 1 in the binary representation of the number.
+It can be used to estimate the complexity of the operations, as the operations that involve more bits set to 1 can be more complex and thus take more time to execute.
+
+The cost computation for the square-and-multiply algorithm can be modeled as follows:
 
 ```python
-%| echo: false
-%| raw: false
-%| grid-inset: 6pt
-%| label: fig4
+%| execute: false
+def square_and_multiply_with_cost(y, x, n, t_mul=1.1):
+    """
+    Square-and-multiply algorithm with cost modeling.
+     - t_mul: cost factor for multiplication operations
+     - t_square: cost factor for squaring operations
+    """
+    s = 1
+    y %= n
+    cost = 0
 
-samples_stats_warmup_0 = get_samples_stats(RSA_instance, 0, num_samples=10000, disable_gc=True, warmup_reps=500, progress_bar=False) / 1e6
-samples_stats_warmup_1 = get_samples_stats(RSA_instance, 1, num_samples=10000, disable_gc=True, warmup_reps=500, progress_bar=False) / 1e6
-
-plot_distributions(samples_stats_warmup_0, samples_stats_warmup_1, percentile=25, title="Timing measurements with garbage collection disabled and warm-up phase")
+    while x > 0:
+        if x & 1:
+            s = (s * y) % n
+            cost += t_mul * s.bit_count()
+        y = (y * y) % n
+        x >>= 1
+    return s, cost
 ```
 
-As the repetitions of timing measurements increase the execution time of the attack, it is important to find the right balance between the number of repetitions of timing measurements and the distinction between the two keys in order to optimize the performance of the attack.
+Note that we increase the cost only for the extra multiplication operations, as the squaring operations are performed in both cases with and without the extra multiplication, meaning that they do not contribute to the timing variations that we want to exploit for the attack.
 
-To do that, I have tried to plot the mean of the timing measurements with and without extra multiplication (key 1 and key 0) for different number of repetitions of timing measurements, as shown on @fig5.
+=== Advantages of the Pearson-based approach
 
-```python
-%| echo: false
-%| raw: false
-%| grid-inset: 6pt
-%| label: fig5
+Compared to the variance based approach, the Pearson correlation coefficient can be more efficient to determine which guess for the bit of the private key $d$ is more likely to be correct, as it takes into account the relationship between the timing measurements and the expected timings based on the guess for the bit of the private key $d$, rather than just looking at the variance of the timing measurements for each guess.
 
-num_repetitions = [10, 50, 100, 500, 1000, 5000, 10000]
-mean_key_0 = []
-mean_key_1 = []
-for num_reps in num_repetitions:
-    samples_stats_warmup_0 = get_samples_stats(RSA_instance, 0, num_samples=num_reps, disable_gc=True, warmup_reps=200, progress_bar=False) / 1e6
-    samples_stats_warmup_1 = get_samples_stats(RSA_instance, 1, num_samples=num_reps, disable_gc=True, warmup_reps=200, progress_bar=False) / 1e6
-    mean_key_0.append(np.mean(remove_outliers(samples_stats_warmup_0)))
-    mean_key_1.append(np.mean(remove_outliers(samples_stats_warmup_1)))
+Indeed, Pearson based approach aims to explain the variations in the execution time of the square-and-multiply algorithm using a simple model that is independent of noise, machine architecture, algorithm implementation, the chosen programming language, and so on.
 
-plt.figure(figsize=(6, 6))
-plt.plot(num_repetitions, mean_key_0, label='Key 0')
-plt.plot(num_repetitions, mean_key_1, label='Key 1')
-plt.xlabel('Number of Repetitions')
-plt.ylabel('Mean Decryption Time (ms)')
-plt.title('Convergence of Timing Measurements')
-plt.legend()
+In this way, the attack depends only on the ability to capture the timing variations from a server.
 
-plt.tight_layout()
-plt.show()
+On top of that, the Pearson approach allows to avoid performing a large number of timing measurements for each guess, allowing to significantly reduce the time taken for the attack.
+
+For instance, instead of performing 1000 messages $dot$ 10000 repetitions = 10 million timing measurements for each guess for the bit of the private key $d$, we only need to compute the Pearson correlation coefficient between two vectors of size 1000, which can be done in a reasonable time even for a large key size.
+
+=== Disadvantages of the Pearson-based approach
+
+The main disadvantage of the Pearson-based approach is that it relies on the design of a good model for the expected timings based on the guess for the bit of the private key $d$.
+
+If the model is not well designed, it can lead to a low Pearson correlation coefficient even for the correct guess for the bit of the private key $d$, making it difficult to distinguish between the correct and incorrect guesses.
+And if the model is too complex, the computation of the expected timings can be time-consuming, which can increase the time taken for the attack.
+
+=== Results of the Pearson-based approach
+
+The results of the Pearson-based approach are quite good, as the second candidate has no error like for the variance-based approach.
+
+```raw
+Iteration 1/5: bit guessed = 0  (r h0 = -0.0077, r h1 = -0.0238)  ✓ CORRECT
+Iteration 2/5: bit guessed = 0  (r h0 = -0.0233, r h1 = -0.0185)  ✗ WRONG
+Iteration 3/5: bit guessed = 1  (r h0 = -0.0216, r h1 = -0.0178)  ✓ CORRECT
+Iteration 4/5: bit guessed = 0  (r h0 = -0.0055, r h1 = -0.0056)  ✓ CORRECT
+Iteration 5/5: bit guessed = 1  (r h0 = -0.0024, r h1 = +0.0144)  ✓ CORRECT
+
+────────────────────────────────────────
+Candidate #1
+  Key:        2020573
+  Pearson r:  +0.0144
+  Error rate: 20.00%  (1/5 bits wrong)
+────────────────────────────────────────
+Candidate #2
+  Key:        1496285
+  Pearson r:  +0.0087
+  Error rate: 0.00%  (0/5 bits wrong)
+────────────────────────────────────────
+Candidate #3
+  Key:        316637
+  Pearson r:  -0.0003
+  Error rate: 40.00%  (2/5 bits wrong)
+────────────────────────────────────────
 ```
 
-=== Performance of the attack
+However, compared to the variance-based approach, only 2000 repetitions of timing measurements were used, and the attack was achieved in around 2 hours, which is significantly faster than the 13 hours taken for the variance-based approach.
 
-As the attack consists in performing a large number of timing measurements, it can be quite time-consuming, especially if we want to perform a large number of repetitions of each measurement to try to extract the signal from the noise.
+We can constate that the Pearson correlation coefficient (Pearson r) is very close to 0 for all candidates, even for the correct candidate, which can be explained by the fact that the model for the expected timings is not perfect and thus does not explain well the timing variations in the square-and-multiply algorithm, or perhaps that the timing variations in the square-and-multiply algorithm don't vary so much.
 
-That's why I have tried to study the number of repetitions of timing measurements needed to distinguish between case with the extra multiplication (key 1) and case without the extra multiplication (key 0).
+To improve the Pearson-based approach, it would be interesting to try to design a better model for the expected timings based on the guess for the bit of the private key $d$, which can help to increase the Pearson correlation coefficient for the correct guess and thus make it easier to distinguish between the correct and incorrect guesses.
+Or it would be interesting to try to collect more timing measurements from the server to have more chance to capture the true timing variations.
 
+A test to recover 10 bits was done, and the results are not so good because the error rate of the three first candidates is around 40%, meaning that they have some errors in the recovered bits of the private key, while the two last candidates have an error rate of 30%, meaning that they have some errors in the recovered bits of the private key but less than the three first candidates.
 
+An error rate of 40% is almost random guessing, meaning that the attack is not able to distinguish between the correct and incorrect guesses for the bits of the private key $d$, while an error rate of 30% is better than random guessing.
 
+```raw
+Iteration  1/10: bit guessed = 1  (r h0 = +0.0000, r h1 = +0.0461)  ✓ CORRECT
+Iteration  2/10: bit guessed = 0  (r h0 = +0.0461, r h1 = +0.0429)  ✓ CORRECT
+Iteration  3/10: bit guessed = 1  (r h0 = +0.0429, r h1 = +0.0704)  ✓ CORRECT
+Iteration  4/10: bit guessed = 0  (r h0 = +0.0704, r h1 = +0.0512)  ✗ WRONG
+Iteration  5/10: bit guessed = 1  (r h0 = +0.0512, r h1 = +0.0461)  ✓ CORRECT
+Iteration  6/10: bit guessed = 1  (r h0 = +0.0626, r h1 = +0.0657)  ✗ WRONG
+Iteration  7/10: bit guessed = 0  (r h0 = +0.0657, r h1 = +0.0756)  ✗ WRONG
+Iteration  8/10: bit guessed = 1  (r h0 = +0.0756, r h1 = +0.0687)  ✓ CORRECT
+Iteration  9/10: bit guessed = 1  (r h0 = +0.0930, r h1 = +0.0880)  ✗ WRONG
+Iteration 10/10: bit guessed = 0  (r h0 = +0.0880, r h1 = +0.0782)  ✓ CORRECT
 
-Personally, I have tried to implement the attack in Rust and C++ to try to reduce the noise caused by the Python interpreter and its optimizations, but the attack was still not successful at all in recovering the private key due to the high noise caused by the CPU cache effects, branch prediction, and other optimizations.
+────────────────────────────────────────
+Candidate #1
+  Key:        407
+  Pearson r:  +0.1067
+  Error rate: 40.00%  (4/10 bits wrong)
+────────────────────────────────────────
+Candidate #2
+  Key:        663
+  Pearson r:  +0.0962
+  Error rate: 40.00%  (4/10 bits wrong)
+────────────────────────────────────────
+Candidate #3
+  Key:        919
+  Pearson r:  +0.0956
+  Error rate: 50.00%  (5/10 bits wrong)
+────────────────────────────────────────
+Candidate #4
+  Key:        247
+  Pearson r:  +0.0930
+  Error rate: 30.00%  (3/10 bits wrong)
+────────────────────────────────────────
+Candidate #5
+  Key:        151
+  Pearson r:  +0.0904
+  Error rate: 30.00%  (3/10 bits wrong)
+────────────────────────────────────────
+```
 
-I have tried to implement a simple version of the timing attack on RSA in Python, based on the square-and-multiply algorithm for modular exponentiation.
+=== Why the timing attack on RSA is still relevant
 
-The code contains two versions of the attack:
-- A simple version that does not take into account the impact of previous errors on the variance, which can lead to a higher number of errors in the recovered private key.
-- An improved version that manage a fixed size list of the best guesses for the private key, and that compute each time the new guess on all the list of best guesses, allowing to avoid the impact of previous errors on the variance and thus reduce the number of errors in the recovered private key.
-  Note that if the list of best guesses contains only guesses with some errors, the attack can still fail, but in practice, it allows to significantly reduce the number of errors in the recovered private key.
+Even if the timing attack on RSA is not as efficient as I expected, it is still relevant to study it and try to implement it, as it allows to understand the vulnerabilities of RSA and the importance of implementing countermeasures against timing attacks.
+Indeed, the timing attack on RSA is a well-known attack that can be used to recover the private key $d$ by exploiting the timing variations in the square-and-multiply algorithm, and it has been shown to be effective in certain scenarios, such as when the implementation of RSA is not properly protected against timing attacks.
 
-However, the attack was not successful at all in recovering the private key, even with the improved version.
-Indeed, Python introduces a lot of noise in the timing measurements, such as:
-- The garbage collector, which can be triggered at any time and can cause significant delays in the execution of the code.
-- The optimization which can change the algorithm used for multiplication depending on the size of the numbers, leading to different timing measurements for the same operations.
-- The branch prediction that can cause variability in the timing measurements based on the input values and the internal state of the algorithm.
-- CPU cache effects that can cause variability in the timing measurements based on the memory access patterns of the algorithm.
-- Other CPU and Python optimizations that can introduce variability in the timing measurements.
-These sources of noise have totally masked the timing variations caused by the square-and-multiply algorithm, making it impossible to recover the private key using the timing attack, even with a large number of repetitions of timing measurements (up to 100k messages and 10000 repetitions in Rust), the disabling of the garbage collector and the addition of a delay before each timing measurement to try to reduce the impact of the optimizations and branch prediction.
+In general, servers are set up one time for many years, and they are optimized as much as the actual modern CPU architecture allows.
+On top of that, the implementations on a server are often done in low-level programming languages such as C or Rust, which can allow to reduce the noise in the timing measurements and thus increase the chances of success of the attack compared to high-level programming languages such as Python.
 
-== Fermat's factorization method
+In this way, the timing variations caused by the square-and-multiply algorithm running on a server can be more significant and thus easier to exploit for the attack compared to the timing variations caused by the square-and-multiply algorithm running on a local machine with a high optimized setup.
+
+#pagebreak()
+
+= Fermat's factorization method on RSA
+
+== Security of RSA and factoring large integers
 
 The private key $d$ in RSA is computed based on the prime factors $p$ and $q$ of the modulus $n$.
 So another way to recover the private key $d$ is to factor the modulus $n$ into its prime factors $p$ and $q$, and then compute $d$ using the formula $d equiv e^(-1) mod phi(n)$ with $phi(n) = (p - 1)(q - 1)$ the Euler's totient function.
@@ -938,7 +1208,13 @@ The inverse of $e$ modulo $phi(n)$ can be computed using the Extended Euclidean 
 
 But factoring large integers is a computationally hard problem, and the security of RSA relies on this fact.
 
-However, if $p$ and $q$ are close to each other, meaning that the difference between $p$ and $q$ is small, then it becomes easier to factor $n$ using Fermat's factorization method.
+However, if $p$ and $q$ are close to each other, meaning that the difference between $p$ and $q$ is small, then it becomes easy to factor $n$ using Fermat's factorization method, as described by Hanno Böck in his paper "Fermat Factorization in the Wild" @fermat.
+
+This paper is quite recent (2023) and it shows that there are still some implementations of RSA that are vulnerable to Fermat's factorization method due to the fact that they use prime numbers $p$ and $q$ that are close to each other, which can be explained by the fact that it is easier to generate prime numbers that are close to each other compared to generating prime numbers that are far from each other.
+
+That's why it is important to study Fermat's factorization method and try to implement it, as it allows to understand the vulnerabilities of RSA and the importance of generating prime numbers that are not close to each other to ensure the security of RSA.
+
+== Description of Fermat's factorization method <theory>
 
 Fermat's factorization method relies on the fact that $n$ is a product of two odd primes $p$ and $q$.
 As $p$ and $q$ are odd, there always exist an integer number which is at the middle of $p$ and $q$, which is $x = (p + q)/2$.
@@ -954,9 +1230,11 @@ $ n = p times q = (x - y)(x + y) = x^2 - y^2 $
 
 From this equation, we can deduce that $y^2 = x^2 - n$.
 
+== From theory to the algorithm
+
 The Fermat's factorization method consists in finding the smallest integer $x$ such that $y^2 = x^2 - n$ is a perfect square, meaning that $y$ is an integer.
 
-Once we find such an integer $x$, we can compute $y$ as $y = sqrt(x^2 - n)$, and then we can obtain the prime factors $p$ and $q$ as described above.
+Once we find such an integer $x$, we can compute $y$ as $y = sqrt(x^2 - n)$, and then we can obtain the prime factors $p$ and $q$ as described in @theory.
 
 So the algorithm can be summarized as follows:
 

@@ -5,36 +5,8 @@
   "stdout": "",
   "stderr": "",
   "display_data": [],
-  "figures": [
-    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_1.svg",
-    "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_2.svg"
-  ],
-  "figure_metadata": [
-    {
-      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_1.svg",
-      "figure": 1,
-      "subplot": 1,
-      "is_subplot": true,
-      "title": "Key 0",
-      "suptitle": "Removing outliers from the timing measurements\nby keeping only the samples between 25% and 75%",
-      "row": 0,
-      "col": 0,
-      "rows": 1,
-      "cols": 2
-    },
-    {
-      "path": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\report\\.typst_pyexec\\figures\\cell_6_1_2.svg",
-      "figure": 1,
-      "subplot": 2,
-      "is_subplot": true,
-      "title": "Key 1",
-      "suptitle": "Removing outliers from the timing measurements\nby keeping only the samples between 25% and 75%",
-      "row": 0,
-      "col": 1,
-      "rows": 1,
-      "cols": 2
-    }
-  ],
-  "error": null,
-  "status": "ok"
+  "figures": [],
+  "figure_metadata": [],
+  "error": "\u001b[31m---------------------------------------------------------------------------\u001b[39m\n\u001b[31mNameError\u001b[39m                                 Traceback (most recent call last)\n\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[48]\u001b[39m\u001b[32m, line 9\u001b[39m\n\u001b[32m      5\u001b[39m \n\u001b[32m      6\u001b[39m plt.figure(figsize=(\u001b[32m12\u001b[39m, \u001b[32m6\u001b[39m))\n\u001b[32m      7\u001b[39m plt.suptitle(\u001b[33m\"Removing outliers from the timing measurements\\nby keeping only the samples between 25% and 75%\"\u001b[39m)\n\u001b[32m      8\u001b[39m plt.subplot(\u001b[32m1\u001b[39m, \u001b[32m2\u001b[39m, \u001b[32m1\u001b[39m)\n\u001b[32m----> \u001b[39m\u001b[32m9\u001b[39m plt.hist(remove_outliers(samples_stats_0, percentile=\u001b[32m25\u001b[39m), bins=\u001b[32m100\u001b[39m)\n\u001b[32m     10\u001b[39m plt.axvline(np.mean(remove_outliers(samples_stats_0, percentile=\u001b[32m25\u001b[39m)), color=\u001b[33m'red'\u001b[39m, linestyle=\u001b[33m'dashed'\u001b[39m, linewidth=\u001b[32m1\u001b[39m, label=f'Mean: {np.mean(remove_outliers(samples_stats_0, percentile=\u001b[32m25\u001b[39m)):.4f} ms')\n\u001b[32m     11\u001b[39m plt.title(\u001b[33m\"Key 0\"\u001b[39m)\n\u001b[32m     12\u001b[39m plt.xlabel(\u001b[33m\"Decryption Time (ms)\"\u001b[39m)\n\n\u001b[31mNameError\u001b[39m: name 'remove_outliers' is not defined",
+  "status": "error"
 }

@@ -1,0 +1,12 @@
+{
+  "schema_version": 3,
+  "hash": "9962a1f69545bdca94cfaf6acbed3577fe68ec2531c8f8b28457304a8ead30bd",
+  "cell_id": "cell_7",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [],
+  "figure_metadata": [],
+  "error": "\u001b[31m---------------------------------------------------------------------------\u001b[39m\n\u001b[31mTypeError\u001b[39m                                 Traceback (most recent call last)\n\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[42]\u001b[39m\u001b[32m, line 9\u001b[39m\n\u001b[32m      5\u001b[39m \n\u001b[32m      6\u001b[39m samples_stats_no_gc_0 = get_samples_stats(RSA_instance, \u001b[32m0\u001b[39m, num_samples=\u001b[32m10000\u001b[39m, warmup_reps=\u001b[32m0\u001b[39m, progress_bar=\u001b[38;5;28;01mFalse\u001b[39;00m) / \u001b[32m1e6\u001b[39m\n\u001b[32m      7\u001b[39m samples_stats_no_gc_1 = get_samples_stats(RSA_instance, \u001b[32m1\u001b[39m, num_samples=\u001b[32m10000\u001b[39m, warmup_reps=\u001b[32m0\u001b[39m, progress_bar=\u001b[38;5;28;01mFalse\u001b[39;00m) / \u001b[32m1e6\u001b[39m\n\u001b[32m      8\u001b[39m \n\u001b[32m----> \u001b[39m\u001b[32m9\u001b[39m plot_distributions(samples_stats_no_gc_0, samples_stats_no_gc_1, percentile=\u001b[32m25\u001b[39m, title=\u001b[33m\"Timing measurements with garbage collection disabled\"\u001b[39m)\n\n\u001b[31mTypeError\u001b[39m: plot_distributions() got an unexpected keyword argument 'percentile'",
+  "status": "error"
+}

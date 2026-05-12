@@ -559,14 +559,14 @@ wheels = [
 
 [[package]]
 name = "matplotlib-inline"
-version = "0.2.1"
+version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "traitlets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c7/74/97e72a36efd4ae2bccb3463284300f8953f199b5ffbc04cbbb0ec78f74b1/matplotlib_inline-0.2.1.tar.gz", hash = "sha256:e1ee949c340d771fc39e241ea75683deb94762c8fa5f2927ec57c83c4dffa9fe", size = 8110, upload-time = "2025-10-23T09:00:22.126Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/c0/9f7c9a46090390368a4d7bcb76bb87a4a36c421e4c0792cdb53486ffac7a/matplotlib_inline-0.2.2.tar.gz", hash = "sha256:72f3fe8fce36b70d4a5b612f899090cd0401deddc4ea90e1572b9f4bfb058c79", size = 8150, upload-time = "2026-05-08T17:33:33.49Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/33/ee4519fa02ed11a94aef9559552f3b17bb863f2ecfe1a35dc7f548cde231/matplotlib_inline-0.2.1-py3-none-any.whl", hash = "sha256:d56ce5156ba6085e00a9d54fead6ed29a9c47e215cd1bba2e976ef39f5710a76", size = 9516, upload-time = "2025-10-23T09:00:20.675Z" },
+    { url = "https://files.pythonhosted.org/packages/41/09/5b161152e2d90f7b87f781c2e1267494aef9c32498df793f73ad0a0a494a/matplotlib_inline-0.2.2-py3-none-any.whl", hash = "sha256:3c821cf1c209f59fb2d2d64abbf5b23b67bcb2210d663f9918dd851c6da1fcf6", size = 9534, upload-time = "2026-05-08T17:33:32.055Z" },
 ]
 
 [[package]]
@@ -1037,7 +1037,7 @@ wheels = [
 
 [[package]]
 name = "typst-pyexec"
-version = "0.0.7"
+version = "0.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "black" },
@@ -1049,9 +1049,9 @@ dependencies = [
     { name = "pandas" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/94/f19ee87e528d8eb5f484c46216c370643fe9eb0f57e0df0c2e3dc4e3fc4e/typst_pyexec-0.0.7.tar.gz", hash = "sha256:9ae865825f59f93ca6d006e1f773742a234074dc9bb406ed76345648ee64bfec", size = 192886, upload-time = "2026-04-04T14:07:29.725Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/23/b35ffd917263779e9e8e3ed70b38e02a7137c1264df3e81078140b089c9c/typst_pyexec-0.0.8.tar.gz", hash = "sha256:8cf2238599a89ede4c51512c0aff582e4994acfbc15dd65f9b43c0d18e642338", size = 196808, upload-time = "2026-05-09T09:21:14.777Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/ed/0731ca5fa3f13371008d54aa6268570f9d03ec6c1bc9368a8e1cb8477253/typst_pyexec-0.0.7-py3-none-any.whl", hash = "sha256:1ae007da49871d22188663b7877603e7b756217c8093eb4f8a846272ff8512ea", size = 41418, upload-time = "2026-04-04T14:07:28.234Z" },
+    { url = "https://files.pythonhosted.org/packages/75/68/a8cf3511462a74996985e765f146c1cd392f8844ef176e0e07ad3446aa48/typst_pyexec-0.0.8-py3-none-any.whl", hash = "sha256:fb9dba34038426d4e01a943de20d295c62b9d57c9a44eed2152d0f2b764552f5", size = 44701, upload-time = "2026-05-09T09:21:12.89Z" },
 ]
 
 [[package]]
