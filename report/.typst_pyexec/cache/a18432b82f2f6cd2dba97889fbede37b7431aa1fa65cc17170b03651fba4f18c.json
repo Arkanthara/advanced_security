@@ -1,0 +1,12 @@
+{
+  "schema_version": 3,
+  "hash": "a18432b82f2f6cd2dba97889fbede37b7431aa1fa65cc17170b03651fba4f18c",
+  "cell_id": "cell_9",
+  "stdout": "",
+  "stderr": "",
+  "display_data": [],
+  "figures": [],
+  "figure_metadata": [],
+  "error": "\u001b[31m---------------------------------------------------------------------------\u001b[39m\n\u001b[31mNameError\u001b[39m                                 Traceback (most recent call last)\n\u001b[36mCell\u001b[39m\u001b[36m \u001b[39m\u001b[32mIn[3]\u001b[39m\u001b[32m, line 41\u001b[39m\n\u001b[32m     37\u001b[39m GAPS     = [\u001b[32m1\u001b[39m, \u001b[32m10\u001b[39m, \u001b[32m100\u001b[39m, \u001b[32m1000\u001b[39m, \u001b[32m10000\u001b[39m, \u001b[32m100000\u001b[39m]\n\u001b[32m     38\u001b[39m \n\u001b[32m     39\u001b[39m \u001b[38;5;66;03m# \u2500\u2500 Benchmark \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u001b[39;00m\n\u001b[32m     40\u001b[39m gaps, times, colors = [], [], []\n\u001b[32m---> \u001b[39m\u001b[32m41\u001b[39m \u001b[38;5;28;01mfor\u001b[39;00m gap \u001b[38;5;28;01min\u001b[39;00m tqdm(GAPS):\n\u001b[32m     42\u001b[39m     runs     = [fermat(make_n(BITS, gap), MAX_ITER) \u001b[38;5;28;01mfor\u001b[39;00m _ \u001b[38;5;28;01min\u001b[39;00m range(REPEATS)]\n\u001b[32m     43\u001b[39m     t        = np.mean([r[\u001b[32m1\u001b[39m] \u001b[38;5;28;01mfor\u001b[39;00m r \u001b[38;5;28;01min\u001b[39;00m runs])\n\u001b[32m     44\u001b[39m     success  = np.mean([r[\u001b[32m2\u001b[39m] \u001b[38;5;28;01mfor\u001b[39;00m r \u001b[38;5;28;01min\u001b[39;00m runs])\n\n\u001b[31mNameError\u001b[39m: name 'tqdm' is not defined",
+  "status": "error"
+}

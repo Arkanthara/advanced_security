@@ -1,0 +1,27 @@
+{
+  "schema_version": 3,
+  "hash": "eebc5a7af271688bcc91d2dffdf63337f35513f2f123cdcdd8eb129f2d1fca4d",
+  "cell_id": "cell_9",
+  "stdout": "",
+  "stderr": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\code\\.venv\\Lib\\site-packages\\typst_pyexec\\runtime\\figure_export.py:149: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown\n  return _ORIGINAL_PYPLOT_SHOW(*args, **kwargs)\n",
+  "display_data": [],
+  "figures": [
+    ".typst_pyexec/figures/cell_9_1.svg"
+  ],
+  "figure_metadata": [
+    {
+      "path": ".typst_pyexec/figures/cell_9_1.svg",
+      "figure": 1,
+      "subplot": 1,
+      "is_subplot": false,
+      "title": "Fermat factorization with n: 2048 bit",
+      "suptitle": "",
+      "row": 0,
+      "col": 0,
+      "rows": 1,
+      "cols": 1
+    }
+  ],
+  "error": null,
+  "status": "ok"
+}

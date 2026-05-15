@@ -1,13 +1,15 @@
 {
   "schema_version": 3,
-  "hash": "2d267c45b31f536fcee94be904c406b602b624ec28113ea1a54373f66bcbc363",
+  "hash": "ab0076d5909026c6efbb3aa7fa6bf1b41e0990c15536984b342472a2ff5a42fe",
   "cell_id": "cell_5",
   "stdout": "",
   "stderr": "C:\\Users\\Sinbad\\Documents\\GitHub\\advanced_security\\code\\.venv\\Lib\\site-packages\\typst_pyexec\\runtime\\figure_export.py:149: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown\n  return _ORIGINAL_PYPLOT_SHOW(*args, **kwargs)\n",
   "display_data": [],
   "figures": [
     ".typst_pyexec/figures/cell_5_1_1.svg",
-    ".typst_pyexec/figures/cell_5_1_2.svg"
+    ".typst_pyexec/figures/cell_5_1_2.svg",
+    ".typst_pyexec/figures/cell_5_1_3.svg",
+    ".typst_pyexec/figures/cell_5_1_4.svg"
   ],
   "figure_metadata": [
     {
@@ -15,11 +17,11 @@
       "figure": 1,
       "subplot": 1,
       "is_subplot": true,
-      "title": "Manual GC disable",
+      "title": "Manual GC disable with big key",
       "suptitle": "Comparison of timing measurements with manual garbage collector (GC) disable versus using timeit (GC handled automatically)",
       "row": 0,
       "col": 0,
-      "rows": 1,
+      "rows": 2,
       "cols": 2
     },
     {
@@ -27,11 +29,35 @@
       "figure": 1,
       "subplot": 2,
       "is_subplot": true,
-      "title": "Using timeit",
+      "title": "Using timeit with big key",
       "suptitle": "Comparison of timing measurements with manual garbage collector (GC) disable versus using timeit (GC handled automatically)",
       "row": 0,
       "col": 1,
-      "rows": 1,
+      "rows": 2,
+      "cols": 2
+    },
+    {
+      "path": ".typst_pyexec/figures/cell_5_1_3.svg",
+      "figure": 1,
+      "subplot": 3,
+      "is_subplot": true,
+      "title": "Manual GC disable with small key",
+      "suptitle": "Comparison of timing measurements with manual garbage collector (GC) disable versus using timeit (GC handled automatically)",
+      "row": 1,
+      "col": 0,
+      "rows": 2,
+      "cols": 2
+    },
+    {
+      "path": ".typst_pyexec/figures/cell_5_1_4.svg",
+      "figure": 1,
+      "subplot": 4,
+      "is_subplot": true,
+      "title": "Using timeit with small key",
+      "suptitle": "Comparison of timing measurements with manual garbage collector (GC) disable versus using timeit (GC handled automatically)",
+      "row": 1,
+      "col": 1,
+      "rows": 2,
       "cols": 2
     }
   ],
