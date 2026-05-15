@@ -20,17 +20,17 @@
   faculty: "Faculty of Science",
   // subtitle: "Report Subtitle",
   course-name: "Advanced Security",
-  course-id: "14X",
-  // illustrations: (
-  //   (
-  //     path: "./img/full_msg.png",
-  //     width: 10cm,
-  //   ),
-  //   (
-  //     path: "./img/full_hist_R.png",
-  //     width: 10cm,
-  //   ),
-  // ),
+  course-id: "14X040",
+  illustrations: (
+    (
+      path: ".typst_pyexec/figures/cell_5_1_1.svg",
+      width: 15cm,
+    ),
+    // (
+    //   path: "./img/full_hist_R.png",
+    //   width: 10cm,
+    // ),
+  ),
   project-name: "Computational Finance",
   date: none,
 
