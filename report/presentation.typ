@@ -160,7 +160,7 @@ $c^d mod n = (m^e)^d mod n = m^(e d) mod n = m^(1 + k phi(n)) mod n = m mod n$
 
 #pagebreak()
 
-= Variance-based timing attack
+= Principles of RSA timing attacks
 
 == Example Protocol
 
@@ -221,12 +221,12 @@ def square_and_multiply(y, x, n):
 == Exploiting timing variations
 
 
-#tblock(title: [Server-side])[
+#tblock(title: [Online])[
 + Attacker sends random ciphertexts $c$ to the server
 + Measures time for decryption $c^d mod n$
 ]
 
-#tblock(title: [Attacker-side])[
+#tblock(title: [Offline])[
 
 + For each bit of $d$, guess bit value (0 or 1)
 + Compute expected timing based on guess
