@@ -12,7 +12,7 @@
   // Structured authors
   authors: (
     (
-      name: "Michel Jean Joseph Donnet",
+      name: "Author",
     ),
   ),
 
@@ -31,7 +31,7 @@
     //   width: 10cm,
     // ),
   ),
-  project-name: "Computational Finance",
+  project-name: "Advanced Security",
   date: none,
 
   // Document options
