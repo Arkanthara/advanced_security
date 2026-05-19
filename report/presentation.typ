@@ -33,6 +33,8 @@
 
 #import "@preview/numbly:0.1.0": numbly
 
+// #context pdfpc.pdfpc-file(here())
+
 #show: stargazer-theme.with(
   aspect-ratio: "16-9",
   // Fix header logo: box it with explicit height and vertical alignment  
@@ -152,9 +154,9 @@
 $c^d mod n = (m^e)^d mod n = m^(e d) mod n = m^(1 + k phi(n)) mod n = m mod n$
 ]
 
-#speaker-note[
-  - Théorème d'Euler: $a^(phi(n)) equiv 1 mod n$ pour $a$ coprime à $n$
-]
+#pdfpc.speaker-note(
+  "Théorème d'Euler : a^(φ(n)) ≡ 1 mod n pour a premier avec n"
+)
 
 
 
@@ -195,11 +197,11 @@ sequenceDiagram
 
 
 
-#speaker-note[
+#pdfpc.speaker-note("
   - Établissement canal sécurisé
   - Échange client-serveur
   - Attaquant envoie des messages chiffrés au serveur et mesure le temps de déchiffrement
-]
+")
 
 == Square-and-multiply algorithm
 
@@ -281,10 +283,10 @@ $ T_i - t(c_i, x_b) = sum_(k = b + 1)^l t_k + epsilon + (t_b_("correct") - t_b_(
 $ T_i - t(c_i, x_b) = sum_(k = b + 1)^l t_k + epsilon + (sum_(k = c)^b (t_k_("correct") - t_k_("incorrect"))) $
 ]
 
-#speaker-note[
-  - $c$ incorrect
-  - Toutes les étapes suivantes sont incorrectes
-]
+#pdfpc.speaker-note(
+  " - c incorrect
+  - Toutes les étapes suivantes sont incorrectes"
+)
 
 = Pearson-based timing attack
 
@@ -328,12 +330,12 @@ Design a model that explains variations in execution time.
 #figure(image(".typst_pyexec/figures/cell_5_1_2.svg", width: 80%
 ), caption: [Distribution of timing measurements], kind: image)
 
-#speaker-note[
-  - Désactivation du garbage collector
+#pdfpc.speaker-note(
+  " - Désactivation du garbage collector
   - Répétition des mesures de temps
   - Phase de warm-up
   - Utilisation de l'estimateur minimum plutôt que la moyenne
-]
+")
 
 #pagebreak()
 
@@ -353,10 +355,10 @@ Design a model that explains variations in execution time.
 ])
 ]
 
-#speaker-note[
-  - Warm-up phase pour réduire l'impact du cache et de la prédiction de branchement
+#pdfpc.speaker-note(
+  " - Warm-up phase pour réduire l'impact du cache et de la prédiction de branchement
   - Pas nécessaire car utilisation du minimum
-]
+")
 
 #pagebreak()
 
@@ -439,11 +441,11 @@ Design a model that explains variations in execution time.
 
 #figure(image(".typst_pyexec/figures/cell_9_1.svg"), caption: [Fermat factorization with n: 2048 bit]) <fig4>
 
-#speaker-note[
-  - Derniers 30 bits de $p$ et $q$ qui diffèrent
+#pdfpc.speaker-note(
+  " - Derniers 30 bits de $p$ et $q$ qui diffèrent
   - Temps pour trouver le gap: 3h
-  - Temps pour trouver les facteurs: moins de 1s
-]
+  - Temps pour trouver les facteurs: moins de 1s"
+)
 
 #pagebreak()
 
@@ -455,11 +457,11 @@ Timing attacks are *still relevant* today.
 
 They highlight the importance of *considering* side-channel attacks when *designing* and *implementing* cryptographic systems.
 
-#speaker-note[
-  - Serveurs sont vieux, moins optimisés et programmés en langage de bas niveau (C, C++)
+#pdfpc.speaker-note(
+  " - Serveurs sont vieux, moins optimisés et programmés en langage de bas niveau (C, C++)
   - RSA est encore largement utilisé
-  - TLS 1.3 a supprimé les suites de chiffrement basées sur RSA, mais de nombreux serveurs supportent encore TLS 1.2 et des versions antérieures
-]
+  - TLS 1.3 a supprimé les suites de chiffrement basées sur RSA, mais de nombreux serveurs supportent encore TLS 1.2 et des versions antérieures"
+)
 
 #pagebreak()
 
